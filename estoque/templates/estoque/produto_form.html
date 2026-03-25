@@ -1,0 +1,54 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card border-primary">
+            <div class="card-header bg-dark text-white fw-bold">Cadastrar Produto</div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Nome do Produto</label>
+                            {{ form.nome }}
+                            <div class="text-danger small">{{ form.nome.errors }}</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Espécie</label>
+                            {{ form.especie }}
+                            <div class="text-danger small">{{ form.especie.errors }}</div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Descrição</label>
+                        {{ form.descricao }}
+                        <div class="text-danger small">{{ form.descricao.errors }}</div>
+                    </div>
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="form-check form-switch">
+                                {{ form.controla_lote }}
+                                <label class="form-check-label">Controla Lote</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check form-switch">
+                                {{ form.controla_validade }}
+                                <label class="form-check-label">Controla Validade</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-check form-switch mb-4">
+                        {{ form.ativo }}
+                        <label class="form-check-label text-muted">Cadastro Ativo</label>
+                    </div>
+                    <div class="d-flex justify-content-end">
+                        <a href="{% url 'produto_list' %}" class="btn btn-secondary me-2">Cancelar</a>
+                        <button type="submit" class="btn btn-primary fw-bold">Salvar Produto</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

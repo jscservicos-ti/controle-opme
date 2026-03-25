@@ -1,0 +1,12 @@
+# Variáveis de ambiente
+.env
+
+# Banco de dados local (Não envie o banco de dados de desenvolvimento para o GitHub!)
+db.sqlite3
+
+# Pastas virtuais e cache do Python
+venv/
+env/
+__pycache__/
+*.pyc
+staticfiles/

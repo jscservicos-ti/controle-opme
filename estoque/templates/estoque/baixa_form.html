@@ -1,0 +1,190 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<h3 class="mb-4 text-danger">Registrar Baixa por Descarte/Perda</h3>
+<form method="post" id="baixa-form" novalidate>
+    {% csrf_token %}
+    <div class="card mb-4 border-danger">
+        <div class="card-header bg-danger text-white fw-bold">Motivo da Baixa</div>
+        <div class="card-body row">
+            <div class="col-md-6">
+                <label class="form-label">Selecione o Motivo</label>
+                {{ form.motivo }}
+                <div class="text-danger small">{{ form.motivo.errors }}</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card mb-4 border-dark">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <span>Produtos Descartados</span>
+            <button type="button" class="btn btn-sm btn-light" id="add-item-btn">+ Adicionar Linha</button>
+        </div>
+        <div class="card-body">
+            
+            {% if formset.non_form_errors %}
+            <div class="alert alert-danger shadow-sm">
+                <strong>Atenção ao Estoque:</strong>
+                {% for error in formset.non_form_errors %}
+                    <div class="small fw-bold">{{ error }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {{ formset.management_form }}
+            <div id="itens-container">
+                {% for form_item in formset %}
+                <div class="item-form row mb-3 pb-3 border-bottom align-items-end">
+                    {{ form_item.id }}
+                    <div class="col-md-6">
+                        <label class="small">Produto (Apenas itens com saldo)</label>
+                        {{ form_item.produto }}
+                        <div class="text-danger small fw-bold">{{ form_item.produto.errors }}</div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="small">Qtd</label>
+                        {{ form_item.quantidade }}
+                        <div class="text-danger small fw-bold">{{ form_item.quantidade.errors }}</div>
+                    </div>
+                    <div class="col-md-4 campo-lote" style="display:none;">
+                        <label class="small text-danger fw-bold">Selecione o Lote Descartado</label>
+                        {{ form_item.lote }}
+                        <div class="text-danger small fw-bold">{{ form_item.lote.errors }}</div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <small class="text-muted d-block mt-3">Nota: Se você descartou lotes diferentes do mesmo produto, adicione o produto novamente em uma nova linha e selecione o outro lote.</small>
+        </div>
+    </div>
+    
+    <div class="text-end mb-5">
+        <a href="{% url 'baixa_list' %}" class="btn btn-secondary me-2">Cancelar</a>
+        <button type="submit" class="btn btn-danger btn-lg fw-bold">Concluir Descarte</button>
+    </div>
+</form>
+
+<div id="empty-form" style="display:none;">
+    <div class="item-form row mb-3 pb-3 border-bottom align-items-end">
+        {{ formset.empty_form.id }}
+        <div class="col-md-6">
+            <label class="small">Produto (Apenas itens com saldo)</label>
+            {{ formset.empty_form.produto }}
+        </div>
+        <div class="col-md-2">
+            <label class="small">Qtd</label>
+            {{ formset.empty_form.quantidade }}
+        </div>
+        <div class="col-md-4 campo-lote" style="display:none;">
+            <label class="small text-danger fw-bold">Selecione o Lote Descartado</label>
+            {{ formset.empty_form.lote }}
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const btnAdd = document.getElementById('add-item-btn');
+        const container = document.getElementById('itens-container');
+        const totalForms = document.getElementById('id_itens-TOTAL_FORMS');
+        const emptyForm = document.getElementById('empty-form').innerHTML;
+        const regras = JSON.parse('{{ produtos_regras_json|safe }}');
+
+        async function atualizarLote(selectProduto) {
+            const row = selectProduto.closest('.item-form');
+            const campoLoteDiv = row.querySelector('.campo-lote');
+            const inputQuantidade = row.querySelector('input[name$="-quantidade"]');
+            
+            let inputLote = row.querySelector('[name$="-lote"]');
+            const loteName = inputLote.getAttribute('name');
+            const loteId = inputLote.getAttribute('id');
+            const produtoId = selectProduto.value;
+            const loteAtual = inputLote.value;
+
+            if (produtoId && regras[produtoId] && regras[produtoId].lote) {
+                campoLoteDiv.style.display = 'block';
+                
+                let selectLote = document.createElement('select');
+                selectLote.className = 'form-select border-danger';
+                selectLote.name = loteName;
+                selectLote.id = loteId;
+                selectLote.innerHTML = '<option value="">Buscando lotes...</option>';
+                
+                inputLote.parentNode.replaceChild(selectLote, inputLote);
+                inputLote = selectLote; 
+
+                try {
+                    const response = await fetch(`/api/lotes/${produtoId}/?acao=baixa`);
+                    const data = await response.json();
+                    
+                    inputLote.innerHTML = '<option value="">-- Escolha um lote --</option>';
+                    
+                    if (data.lotes.length === 0 && !loteAtual) {
+                        inputLote.innerHTML = '<option value="">SEM ESTOQUE DISPONÍVEL</option>';
+                        inputQuantidade.max = 0;
+                    } else {
+                        let loteEncontrado = false;
+                        data.lotes.forEach(l => {
+                            let opt = document.createElement('option');
+                            opt.value = l.lote;
+                            opt.text = `Lote: ${l.lote} (Saldo: ${l.saldo})`;
+                            opt.dataset.saldo = l.saldo;
+                            if (l.lote === loteAtual) {
+                                opt.selected = true;
+                                loteEncontrado = true;
+                            }
+                            inputLote.appendChild(opt);
+                        });
+                        
+                        if (loteAtual && !loteEncontrado) {
+                            let opt = document.createElement('option');
+                            opt.value = loteAtual;
+                            opt.text = `Lote: ${loteAtual} (Selecionado)`;
+                            opt.selected = true;
+                            inputLote.appendChild(opt);
+                        }
+                    }
+                    
+                    inputLote.addEventListener('change', function() {
+                        const selectedOpt = this.options[this.selectedIndex];
+                        if (selectedOpt && selectedOpt.dataset.saldo) {
+                            inputQuantidade.max = selectedOpt.dataset.saldo;
+                            inputQuantidade.placeholder = `Máx: ${selectedOpt.dataset.saldo}`;
+                        }
+                    });
+
+                } catch (error) {
+                    inputLote.innerHTML = '<option value="">Erro na busca</option>';
+                }
+            } else {
+                campoLoteDiv.style.display = 'none';
+                let textLote = document.createElement('input');
+                textLote.type = 'text';
+                textLote.className = 'form-control';
+                textLote.name = loteName;
+                textLote.id = loteId;
+                textLote.value = loteAtual;
+                inputLote.parentNode.replaceChild(textLote, inputLote);
+                
+                inputQuantidade.removeAttribute('max');
+                inputQuantidade.placeholder = '';
+            }
+        }
+
+        document.querySelectorAll('.item-form select[name$="-produto"]').forEach(s => {
+            if(!s.id.includes('__prefix__')){ 
+                s.addEventListener('change', () => atualizarLote(s)); 
+                atualizarLote(s); 
+            }
+        });
+
+        btnAdd.addEventListener('click', function() {
+            let count = parseInt(totalForms.value);
+            container.insertAdjacentHTML('beforeend', emptyForm.replace(/__prefix__/g, count));
+            totalForms.value = count + 1;
+            const newSelects = container.querySelectorAll('.item-form select[name$="-produto"]');
+            const newSelect = newSelects[newSelects.length - 1];
+            newSelect.addEventListener('change', () => atualizarLote(newSelect));
+        });
+    });
+</script>
+{% endblock %}

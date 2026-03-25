@@ -1,0 +1,114 @@
+{% extends 'estoque/base.html' %}
+
+{% block content %}
+<h2 class="mb-4">Dashboard - Controle de OPME</h2>
+
+<div class="row mb-5">
+    <div class="col-md-4">
+        <div class="card bg-primary text-white h-100 shadow-sm border-0">
+            <div class="card-body text-center">
+                <h6 class="text-uppercase fw-bold mb-3">Total de Produtos</h6>
+                <h1 class="display-4 fw-bold">{{ total_produtos }}</h1>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card bg-danger text-white h-100 shadow-sm border-0">
+            <div class="card-body text-center">
+                <h6 class="text-uppercase fw-bold mb-3">Produtos Sem Estoque</h6>
+                <h1 class="display-4 fw-bold">{{ produtos_zerados }}</h1>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card bg-success text-white h-100 shadow-sm border-0">
+            <div class="card-body text-center">
+                <h6 class="text-uppercase fw-bold mb-3">Fornecedores Ativos</h6>
+                <h1 class="display-4 fw-bold">{{ total_fornecedores }}</h1>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card border-success h-100 shadow-sm">
+            <div class="card-header bg-success text-white fw-bold">
+                Últimas Entradas (NFs)
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for entrada in ultimas_entradas %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>NF: {{ entrada.nota_fiscal }}</strong><br>
+                            <small class="text-muted">{{ entrada.fornecedor.nome }}</small>
+                        </div>
+                        <span class="badge bg-success rounded-pill">{{ entrada.data_entrada|date:"d/m/y" }}</span>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-center text-muted py-4">Nenhuma entrada recente.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="card-footer text-center bg-white">
+                <a href="{% url 'entrada_list' %}" class="text-success text-decoration-none fw-bold">Ver todas as Entradas</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card border-warning h-100 shadow-sm">
+            <div class="card-header bg-warning text-dark fw-bold">
+                Últimos Consumos
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for saida in ultimas_saidas %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ saida.paciente }}</strong><br>
+                            <small class="text-muted">Cirurgia: {{ saida.aviso_cirurgia }}</small>
+                        </div>
+                        <span class="badge bg-warning text-dark rounded-pill">{{ saida.data_saida|date:"d/m/y" }}</span>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-center text-muted py-4">Nenhum consumo recente.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="card-footer text-center bg-white">
+                <a href="{% url 'saida_list' %}" class="text-warning text-decoration-none fw-bold">Ver todos os Consumos</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4 mb-4">
+        <div class="card border-danger h-100 shadow-sm">
+            <div class="card-header bg-danger text-white fw-bold">
+                Últimos Descartes
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for baixa in ultimas_baixas %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ baixa.motivo.nome }}</strong><br>
+                            <small class="text-muted">{{ baixa.itens.count }} item(ns) descartado(s)</small>
+                        </div>
+                        <span class="badge bg-danger rounded-pill">{{ baixa.data_baixa|date:"d/m/y" }}</span>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-center text-muted py-4">Nenhum descarte recente.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="card-footer text-center bg-white">
+                <a href="{% url 'baixa_list' %}" class="text-danger text-decoration-none fw-bold">Ver todos os Descartes</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card border-warning shadow">
+            <div class="card-header bg-warning text-dark fw-bold text-center">
+                Ação Necessária: Primeiro Acesso
+            </div>
+            <div class="card-body">
+                <p class="text-muted text-center mb-4">Por motivos de segurança, você deve alterar a sua senha provisória para continuar.</p>
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">Nova Senha (Mínimo 8 caracteres)</label>
+                        {{ form.nova_senha }}
+                        <div class="text-danger small">{{ form.nova_senha.errors }}</div>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label">Confirme a Nova Senha</label>
+                        {{ form.confirmar_senha }}
+                        <div class="text-danger small">{{ form.confirmar_senha.errors }}</div>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100 fw-bold">Salvar e Acessar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

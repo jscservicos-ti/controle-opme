@@ -1,0 +1,53 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="mb-4">
+    <h2>Central de Relatórios</h2>
+    <p class="text-muted">Selecione o relatório que deseja gerar.</p>
+</div>
+
+<div class="row">
+    <div class="col-md-3 mb-4">
+        <div class="card h-100 shadow-sm border-secondary">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-file-earmark-spreadsheet text-secondary" style="font-size: 2.5rem;"></i>
+                <h5 class="card-title mt-3 fw-bold">Ficha Kardex</h5>
+                <p class="card-text text-muted small">Histórico detalhado de fluxo do produto.</p>
+                <a href="{% url 'relatorio_kardex' %}" class="btn btn-secondary mt-2 w-100 fw-bold">Acessar</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-4">
+        <div class="card h-100 shadow-sm border-success">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-box-arrow-in-down-right text-success" style="font-size: 2.5rem;"></i>
+                <h5 class="card-title mt-3 fw-bold">Relatório de Entradas</h5>
+                <p class="card-text text-muted small">Recebimentos e NFs por período.</p>
+                <a href="{% url 'relatorio_entradas' %}" class="btn btn-success mt-2 w-100 fw-bold">Acessar</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-4">
+        <div class="card h-100 shadow-sm border-warning">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-person-heart text-warning" style="font-size: 2.5rem;"></i>
+                <h5 class="card-title mt-3 fw-bold">Consumo de Pacientes</h5>
+                <p class="card-text text-muted small">Produtos utilizados em cirurgias.</p>
+                <a href="{% url 'relatorio_saidas' %}" class="btn btn-warning mt-2 w-100 fw-bold">Acessar</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-4">
+        <div class="card h-100 shadow-sm border-danger">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-trash3 text-danger" style="font-size: 2.5rem;"></i>
+                <h5 class="card-title mt-3 fw-bold">Relatório de Descartes</h5>
+                <p class="card-text text-muted small">Baixas, perdas e vencimentos.</p>
+                <a href="{% url 'relatorio_baixas' %}" class="btn btn-danger mt-2 w-100 fw-bold">Acessar</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

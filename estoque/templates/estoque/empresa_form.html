@@ -1,0 +1,38 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="row justify-content-center mt-3">
+    <div class="col-md-6">
+        <h3 class="mb-4 text-center">{% if empresa %}Editar Cadastro{% else %}Registrar Empresa{% endif %}</h3>
+        <div class="card shadow-sm border-primary">
+            <div class="card-header bg-primary text-white fw-bold">
+                <i class="bi bi-building"></i> Dados da Instituição
+            </div>
+            <div class="card-body p-4 bg-light">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Nome da Empresa / Hospital</label>
+                        {{ form.nome }}
+                        <div class="text-danger small">{{ form.nome.errors }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">CNPJ (Opcional)</label>
+                        {{ form.cnpj }}
+                        <div class="text-danger small">{{ form.cnpj.errors }}</div>
+                    </div>
+                    <div class="mb-4 mt-4 form-check form-switch fs-5">
+                        {{ form.ativo }}
+                        <label class="form-check-label fw-bold text-success ms-2" for="{{ form.ativo.id_for_label }}">Cadastro Ativo (Liberado para uso)</label>
+                        <div class="text-danger small">{{ form.ativo.errors }}</div>
+                    </div>
+                    <hr class="mt-5 mb-4">
+                    <div class="text-end">
+                        <a href="{% url 'empresa_list' %}" class="btn btn-secondary btn-lg me-2">Cancelar</a>
+                        <button type="submit" class="btn btn-primary btn-lg fw-bold">Salvar Cadastro</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

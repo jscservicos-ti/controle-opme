@@ -1,0 +1,62 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Detalhes da Entrada</h2>
+    <a href="{% url 'entrada_list' %}" class="btn btn-secondary">Voltar</a>
+</div>
+
+<div class="card mb-4 border-success">
+    <div class="card-header bg-success text-white fw-bold">
+        Dados da Nota Fiscal
+    </div>
+    <div class="card-body bg-light">
+        <div class="row">
+            <div class="col-md-4"><strong>Nota Fiscal:</strong> {{ entrada.nota_fiscal }}</div>
+            <div class="col-md-4"><strong>Fornecedor:</strong> {{ entrada.fornecedor.nome }}</div>
+            <div class="col-md-4"><strong>Data de Registro:</strong> {{ entrada.data_entrada|date:"d/m/Y H:i" }}</div>
+        </div>
+        <div class="row mt-3">
+            <div class="col-md-12 text-muted small">
+                <strong>Registrado originalmente por:</strong> {{ entrada.usuario_registro.nome|default:entrada.usuario_registro.username }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<h4>Produtos Recebidos</h4>
+<table class="table table-bordered mb-5">
+    <thead class="table-dark">
+        <tr>
+            <th>Produto</th>
+            <th>Quantidade</th>
+            <th>Lote</th>
+            <th>Validade</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in entrada.itens.all %}
+        <tr>
+            <td>{{ item.produto.nome }}</td>
+            <td class="text-success fw-bold">+{{ item.quantidade }}</td>
+            <td>{{ item.lote|default:"-" }}</td>
+            <td>{{ item.validade|date:"d/m/Y"|default:"-" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if entrada.historico.all %}
+<h5 class="text-secondary"><i class="bi bi-clock-history"></i> Histórico de Alterações</h5>
+<ul class="list-group mb-5 shadow-sm">
+    {% for hist in entrada.historico.all %}
+    <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
+        <div>
+            <strong>{{ hist.usuario.nome|default:hist.usuario.username }}</strong>
+            <span class="text-muted ms-2">{{ hist.detalhes }}</span>
+        </div>
+        <span class="badge bg-secondary rounded-pill">{{ hist.data_alteracao|date:"d/m/Y H:i" }}</span>
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

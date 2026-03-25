@@ -1,0 +1,79 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<h3 class="mb-4">{% if usuario %}Editar Usuário: <span class="text-info">{{ usuario.username }}</span>{% else %}Novo Usuário{% endif %}</h3>
+
+<form method="post" class="card p-4 shadow-sm border-info bg-light">
+    {% csrf_token %}
+    <div class="row">
+        <div class="col-md-6 mb-3">
+            <label class="form-label fw-bold">Nome Completo</label>
+            {{ form.nome }}
+            <div class="text-danger small">{{ form.nome.errors }}</div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <label class="form-label fw-bold">CPF</label>
+            {{ form.cpf }}
+            <div class="text-danger small">{{ form.cpf.errors }}</div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <label class="form-label fw-bold">Nome de Usuário (Login)</label>
+            {{ form.username }}
+            <div class="text-danger small">{{ form.username.errors }}</div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card border-primary shadow-sm mb-4">
+                <div class="card-header bg-primary text-white fw-bold py-3">
+                    <i class="bi bi-building-lock me-2"></i> Controle de Acesso às Empresas
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-4 border-bottom pb-3">
+                        Marque abaixo todas as unidades/empresas em que este usuário terá permissão para realizar movimentações de estoque. <br>
+                        <small class="text-info fw-bold"><i class="bi bi-info-circle"></i> Nota: Usuários do "Perfil TI" têm acesso irrestrito a todas as empresas automaticamente.</small>
+                    </p>
+                    
+                    <div class="row g-3">
+                        {% for checkbox in form.empresas %}
+                        <div class="col-md-4">
+                            <div class="form-check border border-secondary-subtle p-3 rounded-3 bg-white shadow-sm h-100 d-flex align-items-center">
+                                {{ checkbox.tag }}
+                                <label class="form-check-label fw-bold ms-2 text-dark" for="{{ checkbox.id_for_label }}" style="cursor: pointer;">
+                                    {{ checkbox.choice_label }}
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="text-danger small mt-2">{{ form.empresas.errors }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-2 px-3 border border-warning rounded py-3 bg-white mx-1">
+        <div class="col-md-6 form-check form-switch fs-5">
+            {{ form.is_active }}
+            <label class="form-check-label fw-bold text-success ms-2" for="{{ form.is_active.id_for_label }}">Usuário Ativo (Pode acessar o sistema)</label>
+        </div>
+        <div class="col-md-6 form-check form-switch fs-5">
+            {{ form.is_ti }}
+            <label class="form-check-label fw-bold text-info ms-2" for="{{ form.is_ti.id_for_label }}">Perfil TI (Acesso de Administrador Geral)</label>
+        </div>
+    </div>
+    
+    {% if not usuario %}
+    <div class="alert alert-warning mt-4 shadow-sm border-warning border-start-0 border-end-0 border-bottom-0 border-4">
+        <i class="bi bi-shield-exclamation fs-5 me-2 align-middle"></i> 
+        <span class="align-middle">A senha padrão inicial será igual ao <strong>Nome de Usuário (Login)</strong> digitado. O sistema exigirá a troca no primeiro acesso.</span>
+    </div>
+    {% endif %}
+
+    <hr class="mt-5 mb-4">
+    <div class="text-end">
+        <a href="{% url 'usuario_list' %}" class="btn btn-secondary btn-lg me-2">Cancelar Operação</a>
+        <button type="submit" class="btn btn-info btn-lg fw-bold text-white px-5 shadow-sm">Salvar Usuário</button>
+    </div>
+</form>
+{% endblock %}

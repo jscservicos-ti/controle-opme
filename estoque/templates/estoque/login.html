@@ -1,0 +1,29 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-4">
+        <div class="card shadow-lg border-0">
+            <div class="card-header bg-dark text-white text-center py-3">
+                <h4 class="mb-0">Controle OPME</h4>
+            </div>
+            <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+                    {% if form.errors %}
+                        <div class="alert alert-danger small">Usuário ou senha incorretos.</div>
+                    {% endif %}
+                    <div class="mb-3">
+                        <label class="form-label text-muted">Login</label>
+                        <input type="text" name="username" class="form-control" required autofocus>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label text-muted">Senha</label>
+                        <input type="password" name="password" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 fw-bold">Entrar no Sistema</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

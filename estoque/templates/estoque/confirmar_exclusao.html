@@ -1,0 +1,16 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6">
+        <div class="alert alert-danger text-center">
+            <h4>Atenção!</h4>
+            <p>Você tem certeza que deseja excluir <strong>{{ item }}</strong>?</p>
+            <form method="post">
+                {% csrf_token %}
+                <a href="{% url url_cancelar %}" class="btn btn-secondary me-2">Cancelar</a>
+                <button type="submit" class="btn btn-danger">Sim, Excluir</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

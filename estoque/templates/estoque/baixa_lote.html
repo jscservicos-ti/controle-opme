@@ -1,0 +1,70 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <h3 class="mb-4">Registrar Saída de Produto</h3>
+        
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white">
+                Dados da Baixa / Utilização
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Paciente ou Motivo da Saída</label>
+                        {{ form.paciente_ou_motivo }}
+                        <div class="text-danger small">{{ form.paciente_ou_motivo.errors }}</div>
+                    </div>
+
+                    <div class="row mb-4 align-items-end">
+                        <div class="col-md-6">
+                            <label class="form-label">Produto (Apenas itens com saldo)</label>
+                            {{ form.produto }}
+                            <div class="text-danger small">{{ form.produto.errors }}</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Quantidade</label>
+                            {{ form.quantidade }}
+                            <div class="text-danger small">{{ form.quantidade.errors }}</div>
+                        </div>
+                        <div class="col-md-3" id="campo-lote" style="display: none;">
+                            <label class="form-label">Lote Utilizado</label>
+                            {{ form.lote }}
+                            <div class="text-danger small">{{ form.lote.errors }}</div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end">
+                        <a href="{% url 'baixa_list' %}" class="btn btn-secondary me-2">Cancelar</a>
+                        <button type="submit" class="btn btn-danger">Confirmar Saída</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const selectProduto = document.getElementById('id_produto_baixa');
+        const divLote = document.getElementById('campo-lote');
+        const regrasProdutos = JSON.parse('{{ produtos_regras_json|safe }}');
+
+        function atualizarCampoLote() {
+            const produtoId = selectProduto.value;
+            if (produtoId && regrasProdutos[produtoId] && regrasProdutos[produtoId].lote) {
+                divLote.style.display = 'block';
+            } else {
+                divLote.style.display = 'none';
+            }
+        }
+
+        if (selectProduto) {
+            selectProduto.addEventListener('change', atualizarCampoLote);
+            atualizarCampoLote(); // Roda ao abrir a tela
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Detalhes da Saída</h2>
+    <a href="{% url 'saida_list' %}" class="btn btn-secondary">Voltar</a>
+</div>
+
+<div class="card mb-4 border-warning">
+    <div class="card-header bg-warning text-dark fw-bold">
+        Dados do Atendimento
+    </div>
+    <div class="card-body bg-light">
+        <div class="row">
+            <div class="col-md-3"><strong>Paciente:</strong><br> {{ saida.paciente }}</div>
+            <div class="col-md-3"><strong>Atendimento:</strong><br> {{ saida.atendimento }}</div>
+            <div class="col-md-3"><strong>Cirurgia:</strong><br> {{ saida.aviso_cirurgia }}</div>
+            <div class="col-md-3"><strong>Data do Registro:</strong><br> {{ saida.data_saida|date:"d/m/Y H:i" }}</div>
+        </div>
+        <div class="row mt-3">
+            <div class="col-md-12 text-muted small">
+                <strong>Registrado originalmente por:</strong> {{ saida.usuario_registro.nome|default:saida.usuario_registro.username }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<h4>Produtos Consumidos</h4>
+<table class="table table-bordered mb-5">
+    <thead class="table-dark">
+        <tr>
+            <th>Produto</th>
+            <th>Quantidade</th>
+            <th>Lote</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in saida.itens.all %}
+        <tr>
+            <td>{{ item.produto.nome }}</td>
+            <td class="text-danger fw-bold">-{{ item.quantidade }}</td>
+            <td>{{ item.lote|default:"-" }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if saida.historico.all %}
+<h5 class="text-secondary"><i class="bi bi-clock-history"></i> Histórico de Alterações</h5>
+<ul class="list-group mb-5 shadow-sm">
+    {% for hist in saida.historico.all %}
+    <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
+        <div>
+            <strong>{{ hist.usuario.nome|default:hist.usuario.username }}</strong>
+            <span class="text-muted ms-2">{{ hist.detalhes }}</span>
+        </div>
+        <span class="badge bg-secondary rounded-pill">{{ hist.data_alteracao|date:"d/m/Y H:i" }}</span>
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

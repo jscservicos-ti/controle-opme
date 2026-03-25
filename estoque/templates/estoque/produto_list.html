@@ -1,0 +1,132 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2>Produtos</h2>
+    <div>
+        <button class="btn btn-success me-2 fw-bold" data-bs-toggle="modal" data-bs-target="#exportModal">Exportar Relatório</button>
+        <a href="{% url 'produto_create' %}" class="btn btn-primary fw-bold">+ Novo Produto</a>
+    </div>
+</div>
+
+<form method="get" class="card p-3 mb-4 bg-light border-0 shadow-sm">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="small text-muted">Pesquisar por Código ou Nome</label>
+            <input type="text" name="q" class="form-control" value="{{ q }}" placeholder="Ex: Fio Cirúrgico ou 15">
+        </div>
+        <div class="col-md-3">
+            <label class="small text-muted">Espécie</label>
+            <select name="especie" class="form-select">
+                <option value="">Todas as Espécies</option>
+                {% for e in especies %}
+                <option value="{{ e.id }}" {% if especie_id == e.id|stringformat:"s" %}selected{% endif %}>{{ e.nome }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="small text-muted">Status</label>
+            <select name="status" class="form-select">
+                <option value="">Todos</option>
+                <option value="ativo" {% if status == 'ativo' %}selected{% endif %}>Ativos</option>
+                <option value="inativo" {% if status == 'inativo' %}selected{% endif %}>Inativos</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <input type="hidden" name="sort" value="{{ sort }}">
+            <button type="submit" class="btn btn-dark w-100">Filtrar</button>
+        </div>
+    </div>
+</form>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <table class="table table-striped table-hover align-middle m-0">
+            <thead class="table-dark">
+                <tr>
+                    <th>
+                        <a href="?q={{ q }}&status={{ status }}&especie={{ especie_id }}&sort={% if sort == 'id' %}-id{% else %}id{% endif %}" class="text-white text-decoration-none">
+                            Cód {% if sort == 'id' %}↑{% elif sort == '-id' %}↓{% endif %}
+                        </a>
+                    </th>
+                    <th>
+                        <a href="?q={{ q }}&status={{ status }}&especie={{ especie_id }}&sort={% if sort == 'nome' %}-nome{% else %}nome{% endif %}" class="text-white text-decoration-none">
+                            Nome do Produto {% if sort == 'nome' %}↑{% elif sort == '-nome' %}↓{% endif %}
+                        </a>
+                    </th>
+                    <th>Espécie</th>
+                    <th>Estoque</th>
+                    <th>Status</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for produto in produtos %}
+                <tr>
+                    <td><strong>{{ produto.id }}</strong></td>
+                    <td>{{ produto.nome }}</td>
+                    <td>{{ produto.especie.nome }}</td>
+                    <td>{{ produto.quantidade_em_estoque }}</td>
+                    <td>
+                        {% if produto.ativo %}<span class="badge bg-success">Ativo</span>
+                        {% else %}<span class="badge bg-secondary">Inativo</span>{% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'produto_detail' produto.id %}" class="btn btn-sm btn-info text-white">Lotes</a>
+                        <a href="{% url 'produto_edit' produto.id %}" class="btn btn-sm btn-warning">Editar</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="exportModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="{% url 'produto_export' %}" method="get">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">Exportar Relatório</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Formato do Arquivo</label>
+                        <select name="formato" class="form-select">
+                            <option value="excel">Planilha Excel (.xlsx)</option>
+                            <option value="pdf">Documento PDF (Impressão)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Tipo de Relatório</label>
+                        <select name="tipo" class="form-select" id="tipoRelatorio" onchange="toggleZerados()">
+                            <option value="sintetica">Sintética (Estoque Total)</option>
+                            <option value="analitica">Analítica (Detalhado por Lotes)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3" id="divZerados">
+                        <label class="form-label fw-bold">Produtos Zerados</label>
+                        <select name="zerados" class="form-select">
+                            <option value="0">Ocultar produtos com estoque zerado</option>
+                            <option value="1">Exibir todos os produtos</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success fw-bold">Gerar Relatório</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Esconde a opção de "Produtos zerados" se for a visão Analítica
+    function toggleZerados() {
+        const tipo = document.getElementById('tipoRelatorio').value;
+        const div = document.getElementById('divZerados');
+        div.style.display = tipo === 'analitica' ? 'none' : 'block';
+    }
+</script>
+{% endblock %}

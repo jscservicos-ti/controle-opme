@@ -1,0 +1,39 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card shadow-lg border-0 rounded-4">
+            <div class="card-header bg-primary text-white text-center py-4 rounded-top-4">
+                <i class="bi bi-buildings" style="font-size: 3rem;"></i>
+                <h3 class="mb-0 fw-bold mt-2">Ambiente de Trabalho</h3>
+            </div>
+            <div class="card-body p-5 text-center bg-light rounded-bottom-4">
+                <p class="text-muted mb-4 fs-5">Selecione em qual empresa (unidade) você irá trabalhar neste momento.</p>
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="d-grid gap-3">
+                        {% for empresa in empresas %}
+                        <button type="submit" name="empresa_id" value="{{ empresa.id }}" class="btn btn-outline-primary btn-lg fw-bold text-start p-3 shadow-sm rounded-3">
+                            <i class="bi bi-arrow-right-circle-fill me-2 fs-4 align-middle"></i> 
+                            <span class="fs-5 align-middle">{{ empresa.nome }}</span>
+                        </button>
+                        {% empty %}
+                        <div class="alert alert-warning border-0 shadow-sm py-4">
+                            <i class="bi bi-exclamation-triangle-fill fs-2 d-block mb-3 text-warning"></i>
+                            
+                            {% if user.is_ti or user.is_superuser %}
+                                <strong class="fs-5 text-dark">Sistema Vazio!</strong><br><br>
+                                <span class="text-muted">Você precisa cadastrar o primeiro hospital/empresa no sistema para começar a operar.</span><br><br>
+                                <a href="{% url 'empresa_create' %}" class="btn btn-success mt-2 fw-bold shadow-sm w-100"><i class="bi bi-plus-circle"></i> Cadastrar Primeira Empresa</a>
+                            {% else %}
+                                <strong>Sem Acesso!</strong><br>Você não possui vínculos com nenhuma empresa no sistema. Solicite a liberação para a TI.
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

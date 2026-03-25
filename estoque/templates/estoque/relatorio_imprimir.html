@@ -1,0 +1,79 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+
+<style>
+    @media print {
+        @page { margin: 1cm; }
+        body { background-color: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        .no-print { display: none !important; }
+        .table { width: 100% !important; border-collapse: collapse !important; }
+        .table th, .table td { border: 1px solid #000 !important; padding: 6px !important; }
+        .table-dark th { background-color: #212529 !important; color: white !important; }
+    }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-4 no-print">
+    <h2>Visualização de Impressão</h2>
+    <div>
+        <button onclick="window.print()" class="btn btn-dark fw-bold"><i class="bi bi-printer"></i> Imprimir Agora</button>
+        <a href="javascript:history.back()" class="btn btn-secondary">Voltar</a>
+    </div>
+</div>
+
+<div class="mb-4">
+    <h3 class="fw-bold mb-1">Relatório de OPME - Visão {% if tipo == 'sintetica' %}Sintética{% else %}Analítica{% endif %}</h3>
+    <p class="text-muted"><strong>Unidade:</strong> {{ request.session.empresa_nome }} | <strong>Data de Emissão:</strong> {% now "d/m/Y H:i" %}</p>
+</div>
+
+<table class="table table-bordered table-striped align-middle">
+    <thead class="table-dark">
+        {% if tipo == 'sintetica' %}
+        <tr>
+            <th>Código</th>
+            <th>Produto</th>
+            <th>Espécie</th>
+            <th>Estoque Total</th>
+        </tr>
+        {% else %}
+        <tr>
+            <th>Código</th>
+            <th>Produto</th>
+            <th>Espécie</th>
+            <th>Lote</th>
+            <th>Validade</th>
+            <th>Qtd Disponível</th>
+        </tr>
+        {% endif %}
+    </thead>
+    <tbody>
+        {% if tipo == 'sintetica' %}
+            {% for p in produtos %}
+            <tr>
+                <td>{{ p.id }}</td>
+                <td class="fw-bold">{{ p.nome }}</td>
+                <td>{{ p.especie.nome }}</td>
+                <td class="text-primary fw-bold">{{ p.saldo_empresa }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-center py-3">Nenhum produto com saldo encontrado.</td></tr>
+            {% endfor %}
+        {% else %}
+            {% for item in dados_analiticos %}
+                {% for l in item.lotes %}
+                <tr>
+                    <td>{{ item.produto.id }}</td>
+                    <td class="fw-bold">{{ item.produto.nome }}</td>
+                    <td>{{ item.produto.especie.nome }}</td>
+                    <td>{{ l.lote }}</td>
+                    <td>{{ l.validade|date:"d/m/Y"|default:"-" }}</td>
+                    <td class="text-success fw-bold">{{ l.saldo }}</td>
+                </tr>
+                {% endfor %}
+            {% empty %}
+            <tr><td colspan="6" class="text-center py-3">Nenhum lote com saldo encontrado.</td></tr>
+            {% endfor %}
+        {% endif %}
+    </tbody>
+</table>
+
+{% endblock %}

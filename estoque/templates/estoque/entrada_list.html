@@ -1,0 +1,41 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Histórico de Notas Fiscais</h2>
+    <a href="{% url 'entrada_create' %}" class="btn btn-primary">+ Registrar NF</a>
+</div>
+<div class="card">
+    <div class="card-body">
+        <table class="table table-striped table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Nota Fiscal</th>
+                    <th>Fornecedor</th>
+                    <th>Itens</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entrada in entradas %}
+                <tr>
+                    <td>{{ entrada.data_entrada|date:"d/m/Y H:i" }}</td>
+                    <td><strong>{{ entrada.nota_fiscal }}</strong></td>
+                    <td>{{ entrada.fornecedor.nome }}</td>
+                    <td>{{ entrada.itens.count }}</td>
+                    <td>
+                        <a href="{% url 'entrada_detail' entrada.id %}" class="btn btn-sm btn-info text-white">Detalhes</a>
+                        <a href="{% url 'entrada_edit' entrada.id %}" class="btn btn-sm btn-warning">Editar</a>
+                        <a href="{% url 'entrada_delete' entrada.id %}" class="btn btn-sm btn-danger">Excluir</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center">Nenhuma nota fiscal registrada.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

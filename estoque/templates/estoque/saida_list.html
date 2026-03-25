@@ -1,0 +1,43 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Saídas para Paciente</h2>
+    <a href="{% url 'saida_create' %}" class="btn btn-warning text-dark fw-bold">+ Registrar Saída</a>
+</div>
+<div class="card border-warning shadow-sm">
+    <div class="card-body p-0">
+        <table class="table table-striped align-middle m-0">
+            <thead class="table-dark">
+                <tr>
+                    <th>Data</th>
+                    <th>Paciente</th>
+                    <th>Atendimento</th>
+                    <th>Cirurgia</th>
+                    <th>Usuário</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in saidas %}
+                <tr>
+                    <td>{{ s.data_saida|date:"d/m/Y H:i" }}</td>
+                    <td><strong>{{ s.paciente }}</strong></td>
+                    <td>{{ s.atendimento }}</td>
+                    <td>{{ s.aviso_cirurgia }}</td>
+                    <td class="small text-muted">{{ s.usuario_registro.username }}</td>
+                    <td>
+                        <a href="{% url 'saida_detail' s.id %}" class="btn btn-sm btn-info text-white">Detalhes</a>
+                        <a href="{% url 'saida_edit' s.id %}" class="btn btn-sm btn-warning">Editar</a>
+                        <a href="{% url 'saida_delete' s.id %}" class="btn btn-sm btn-danger">Excluir</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-4 text-muted">Nenhuma saída registrada.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
