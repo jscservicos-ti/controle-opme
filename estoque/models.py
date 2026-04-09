@@ -23,6 +23,11 @@ class Especie(models.Model):
     ativo = models.BooleanField(default=True, verbose_name="Ativo?")
     def __str__(self): return f"[{self.id}] {self.nome}"
 
+class Marca(models.Model):
+    nome = models.CharField(max_length=100, unique=True)
+    ativo = models.BooleanField(default=True, verbose_name="Ativo?")
+    def __str__(self): return self.nome
+
 class Fornecedor(models.Model):
     nome = models.CharField(max_length=200)
     cnpj = models.CharField(max_length=18, blank=True, null=True)
@@ -33,6 +38,7 @@ class Fornecedor(models.Model):
 class Produto(models.Model):
     nome = models.CharField(max_length=200)
     especie = models.ForeignKey(Especie, on_delete=models.PROTECT)
+    marca = models.ForeignKey(Marca, on_delete=models.PROTECT, null=True, blank=True)
     controla_lote = models.BooleanField(default=False, verbose_name="Controla Lote?")
     controla_validade = models.BooleanField(default=False, verbose_name="Controla Validade?")
     descricao = models.TextField(blank=True, null=True)
@@ -44,7 +50,14 @@ class Produto(models.Model):
         t_in = ItemEntrada.objects.filter(produto=self, entrada__empresa=empresa).aggregate(t=Sum('quantidade'))['t'] or 0
         t_out = ItemSaida.objects.filter(produto=self, saida__empresa=empresa).aggregate(t=Sum('quantidade'))['t'] or 0
         t_loss = ItemBaixa.objects.filter(produto=self, baixa__empresa=empresa).aggregate(t=Sum('quantidade'))['t'] or 0
-        saldo = t_in - t_out - t_loss
+        
+        t_manutencao = Manutencao.objects.filter(
+            produto=self, 
+            empresa=empresa, 
+            status__in=['PENDENTE', 'DESCARTADO']
+        ).aggregate(t=Sum('quantidade'))['t'] or 0
+        
+        saldo = t_in - t_out - t_loss - t_manutencao
         
         estoque_obj, created = Estoque.objects.get_or_create(produto=self, empresa=empresa)
         estoque_obj.quantidade = saldo
@@ -60,7 +73,7 @@ class Estoque(models.Model):
 class Entrada(models.Model):
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT)
     fornecedor = models.ForeignKey(Fornecedor, on_delete=models.PROTECT)
-    nota_fiscal = models.CharField(max_length=50)
+    nota_fiscal = models.CharField(max_length=50, blank=True, null=True)
     data_entrada = models.DateTimeField(auto_now_add=True)
     usuario_registro = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='entradas_criadas')
 
@@ -121,9 +134,14 @@ class HistoricoBaixa(models.Model):
     detalhes = models.TextField()
 
 class AuditoriaExclusao(models.Model):
-    TIPO_CHOICES = [('ENTRADA', 'Entrada (NF)'), ('SAIDA', 'Saída (Paciente)'), ('BAIXA', 'Baixa (Descarte)')]
+    TIPO_CHOICES = [
+        ('ENTRADA', 'Entrada (NF)'), 
+        ('SAIDA', 'Saída (Paciente)'), 
+        ('BAIXA', 'Baixa (Descarte)'),
+        ('MANUTENCAO', 'Manutenção') # <-- Adicionado aqui
+    ]
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT)
-    tipo_movimento = models.CharField(max_length=10, choices=TIPO_CHOICES)
+    tipo_movimento = models.CharField(max_length=15, choices=TIPO_CHOICES)
     identificador = models.CharField(max_length=255)
     usuario = models.ForeignKey(Usuario, on_delete=models.PROTECT)
     data_exclusao = models.DateTimeField(auto_now_add=True)
@@ -134,3 +152,43 @@ class ItemAuditoriaExclusao(models.Model):
     quantidade = models.IntegerField()
     lote = models.CharField(max_length=50, blank=True, null=True)
     validade = models.CharField(max_length=50, blank=True, null=True)
+
+class Defeito(models.Model):
+    nome = models.CharField(max_length=150, unique=True)
+    ativo = models.BooleanField(default=True)
+    def __str__(self): return self.nome
+
+class Especialidade(models.Model):
+    nome = models.CharField(max_length=150, unique=True)
+    ativo = models.BooleanField(default=True)
+    def __str__(self): return self.nome
+
+class Manutencao(models.Model):
+    STATUS_CHOICES = (
+        ('PENDENTE', 'Pendente (Em Manutenção)'),
+        ('REPARADO', 'Concluído (Retornou ao Estoque)'),
+        ('DESCARTADO', 'Concluído (Não Reparado / Descartado)'),
+    )
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+    produto = models.ForeignKey(Produto, on_delete=models.PROTECT)
+    quantidade = models.PositiveIntegerField(default=1)
+    lote = models.CharField(max_length=50, blank=True, null=True)
+    
+    defeito = models.ForeignKey(Defeito, on_delete=models.PROTECT)
+    especialidade = models.ForeignKey(Especialidade, on_delete=models.PROTECT)
+    prontuario = models.CharField(max_length=50, blank=True, null=True)
+    
+    data_registro = models.DateTimeField(auto_now_add=True)
+    data_envio = models.DateField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDENTE')
+    
+    foto_defeito = models.ImageField(upload_to='manutencao/defeitos/')
+    foto_reparo = models.ImageField(upload_to='manutencao/reparos/', blank=True, null=True)
+    justificativa_descarte = models.TextField(blank=True, null=True)
+    
+    usuario_registro = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='manutencoes_enviadas')
+    usuario_conclusao = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='manutencoes_concluidas', blank=True, null=True)
+    data_conclusao = models.DateTimeField(blank=True, null=True)
+
+    def __str__(self):
+        return f"Manutenção #{self.id} - {self.produto.nome} ({self.status})"

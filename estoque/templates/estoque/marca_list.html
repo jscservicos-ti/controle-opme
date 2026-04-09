@@ -1,0 +1,51 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3><i class="bi bi-tags me-2 text-primary"></i> Marcas Cadastradas</h3>
+    <a href="{% url 'marca_create' %}" class="btn btn-primary fw-bold">+ Nova Marca</a>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped mb-0 align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="width: 10%;">ID</th>
+                        <th>Nome da Marca</th>
+                        <th style="width: 15%;">Status</th>
+                        <th class="text-center" style="width: 15%;">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in marcas %}
+                    <tr>
+                        <td class="fw-bold text-muted">#{{ m.id }}</td>
+                        <td class="fw-bold">{{ m.nome }}</td>
+                        <td>
+                            {% if m.ativo %}
+                                <span class="badge bg-success">Ativa</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Inativa</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <a href="{% url 'marca_edit' m.id %}" class="btn btn-sm btn-outline-primary" title="Editar">
+                                <i class="bi bi-pencil"></i> Editar
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                            Nenhuma marca cadastrada.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

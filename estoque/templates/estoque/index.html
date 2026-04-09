@@ -1,49 +1,59 @@
 {% extends 'estoque/base.html' %}
 
 {% block content %}
-<h2 class="mb-4">Dashboard - Controle de OPME</h2>
+<h2 class="mb-4"><i class="bi bi-speedometer2 text-secondary me-2"></i> Dashboard</h2>
 
-<div class="row mb-5">
-    <div class="col-md-4">
+<div class="row mb-5 g-3">
+    <div class="col-md-3">
         <div class="card bg-primary text-white h-100 shadow-sm border-0">
-            <div class="card-body text-center">
-                <h6 class="text-uppercase fw-bold mb-3">Total de Produtos</h6>
-                <h1 class="display-4 fw-bold">{{ total_produtos }}</h1>
+            <div class="card-body text-center d-flex flex-column justify-content-center py-4">
+                <h6 class="text-uppercase fw-bold mb-3"><i class="bi bi-box-seam me-1"></i> Total de Produtos</h6>
+                <h1 class="display-4 fw-bold mb-0">{{ total_produtos }}</h1>
             </div>
         </div>
     </div>
     
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card bg-danger text-white h-100 shadow-sm border-0">
-            <div class="card-body text-center">
-                <h6 class="text-uppercase fw-bold mb-3">Produtos Sem Estoque</h6>
-                <h1 class="display-4 fw-bold">{{ produtos_zerados }}</h1>
+            <div class="card-body text-center d-flex flex-column justify-content-center py-4">
+                <h6 class="text-uppercase fw-bold mb-3"><i class="bi bi-exclamation-triangle me-1"></i> Sem Estoque</h6>
+                <h1 class="display-4 fw-bold mb-0">{{ produtos_zerados }}</h1>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card bg-info text-dark h-100 shadow-sm border-0" style="background-color: #0dcaf0 !important;">
+            <div class="card-body text-center d-flex flex-column justify-content-center py-4">
+                <h6 class="text-uppercase fw-bold mb-3"><i class="bi bi-tools me-1"></i> Manutenções Pendentes</h6>
+                <h1 class="display-4 fw-bold mb-0">{{ itens_em_manutencao }}</h1>
             </div>
         </div>
     </div>
     
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="card bg-success text-white h-100 shadow-sm border-0">
-            <div class="card-body text-center">
-                <h6 class="text-uppercase fw-bold mb-3">Fornecedores Ativos</h6>
-                <h1 class="display-4 fw-bold">{{ total_fornecedores }}</h1>
+            <div class="card-body text-center d-flex flex-column justify-content-center py-4">
+                <h6 class="text-uppercase fw-bold mb-3"><i class="bi bi-truck me-1"></i> Fornecedores Ativos</h6>
+                <h1 class="display-4 fw-bold mb-0">{{ total_fornecedores }}</h1>
             </div>
         </div>
     </div>
 </div>
 
-<div class="row">
-    <div class="col-md-4 mb-4">
+<div class="row g-4">
+    
+    <div class="col-md-6 mb-2">
         <div class="card border-success h-100 shadow-sm">
             <div class="card-header bg-success text-white fw-bold">
-                Últimas Entradas (NFs)
+                <i class="bi bi-box-arrow-in-down-right me-1"></i> Últimas Entradas
             </div>
             <div class="card-body p-0">
                 <ul class="list-group list-group-flush">
                     {% for entrada in ultimas_entradas %}
                     <li class="list-group-item d-flex justify-content-between align-items-center">
                         <div>
-                            <strong>NF: {{ entrada.nota_fiscal }}</strong><br>
+                            <strong>NF: {{ entrada.nota_fiscal|default:"S/N" }}</strong><br>
                             <small class="text-muted">{{ entrada.fornecedor.nome }}</small>
                         </div>
                         <span class="badge bg-success rounded-pill">{{ entrada.data_entrada|date:"d/m/y" }}</span>
@@ -53,16 +63,16 @@
                     {% endfor %}
                 </ul>
             </div>
-            <div class="card-footer text-center bg-white">
+            <div class="card-footer text-center bg-white border-success">
                 <a href="{% url 'entrada_list' %}" class="text-success text-decoration-none fw-bold">Ver todas as Entradas</a>
             </div>
         </div>
     </div>
 
-    <div class="col-md-4 mb-4">
+    <div class="col-md-6 mb-2">
         <div class="card border-warning h-100 shadow-sm">
             <div class="card-header bg-warning text-dark fw-bold">
-                Últimos Consumos
+                <i class="bi bi-person-heart me-1"></i> Últimos Consumos
             </div>
             <div class="card-body p-0">
                 <ul class="list-group list-group-flush">
@@ -79,16 +89,16 @@
                     {% endfor %}
                 </ul>
             </div>
-            <div class="card-footer text-center bg-white">
+            <div class="card-footer text-center bg-white border-warning">
                 <a href="{% url 'saida_list' %}" class="text-warning text-decoration-none fw-bold">Ver todos os Consumos</a>
             </div>
         </div>
     </div>
 
-    <div class="col-md-4 mb-4">
+    <div class="col-md-6 mb-4">
         <div class="card border-danger h-100 shadow-sm">
             <div class="card-header bg-danger text-white fw-bold">
-                Últimos Descartes
+                <i class="bi bi-trash3 me-1"></i> Últimos Descartes
             </div>
             <div class="card-body p-0">
                 <ul class="list-group list-group-flush">
@@ -105,10 +115,45 @@
                     {% endfor %}
                 </ul>
             </div>
-            <div class="card-footer text-center bg-white">
+            <div class="card-footer text-center bg-white border-danger">
                 <a href="{% url 'baixa_list' %}" class="text-danger text-decoration-none fw-bold">Ver todos os Descartes</a>
             </div>
         </div>
     </div>
+
+    <div class="col-md-6 mb-4">
+        <div class="card border-primary h-100 shadow-sm">
+            <div class="card-header bg-primary text-white fw-bold">
+                <i class="bi bi-tools me-1"></i> Últimas Manutenções
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for m in ultimas_manutencoes %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ m.produto.nome }}</strong>
+                            {% if m.status == 'PENDENTE' %}
+                                <span class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem;">Na Assist.</span>
+                            {% elif m.status == 'REPARADO' %}
+                                <span class="badge bg-success ms-1" style="font-size: 0.65rem;">Reparado</span>
+                            {% else %}
+                                <span class="badge bg-danger ms-1" style="font-size: 0.65rem;">Descartado</span>
+                            {% endif %}
+                            <br>
+                            <small class="text-muted">Defeito: {{ m.defeito.nome }} (Qtd: {{ m.quantidade }})</small>
+                        </div>
+                        <span class="badge bg-primary rounded-pill">{{ m.data_registro|date:"d/m/y" }}</span>
+                    </li>
+                    {% empty %}
+                    <li class="list-group-item text-center text-muted py-4">Nenhuma manutenção recente.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="card-footer text-center bg-white border-primary">
+                <a href="{% url 'manutencao_list' %}" class="text-primary text-decoration-none fw-bold">Ver todas as Manutenções</a>
+            </div>
+        </div>
+    </div>
+
 </div>
 {% endblock %}

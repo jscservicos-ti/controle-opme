@@ -1,57 +1,62 @@
 {% extends 'estoque/base.html' %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>Detalhes da Exclusão</h2>
-    <a href="{% url 'auditoria_list' %}" class="btn btn-secondary">Voltar ao Cofre</a>
+<div class="d-flex justify-content-between align-items-center mb-4 no-print">
+    <h3><i class="bi bi-shield-exclamation text-danger me-2"></i> Detalhes da Exclusão #{{ auditoria.id }}</h3>
+    <div>
+        <button onclick="window.print()" class="btn btn-outline-secondary me-2"><i class="bi bi-printer"></i> Imprimir</button>
+        <a href="{% url 'auditoria_list' %}" class="btn btn-dark fw-bold">Voltar ao Cofre</a>
+    </div>
 </div>
 
-<div class="card mb-4 border-secondary shadow-sm">
-    <div class="card-header bg-secondary text-white fw-bold">
-        Informações do Registro Apagado
-    </div>
-    <div class="card-body bg-light">
-        <div class="row">
-            <div class="col-md-3"><strong>Tipo de Movimento:</strong><br> {{ auditoria.get_tipo_movimento_display }}</div>
-            <div class="col-md-5"><strong>Identificador Original:</strong><br> {{ auditoria.identificador }}</div>
-            <div class="col-md-2"><strong>Excluído por:</strong><br> <span class="text-danger fw-bold">{{ auditoria.usuario.username }}</span></div>
-            <div class="col-md-2"><strong>Data da Exclusão:</strong><br> {{ auditoria.data_exclusao|date:"d/m/Y H:i" }}</div>
+<div class="row">
+    <div class="col-md-4 mb-4">
+        <div class="card shadow-sm border-danger h-100">
+            <div class="card-header bg-danger text-white fw-bold">Dados do Registro Excluído</div>
+            <div class="card-body">
+                <p><strong>Tipo:</strong> 
+                    {% if auditoria.tipo_movimento == 'ENTRADA' %} Entrada (NF)
+                    {% elif auditoria.tipo_movimento == 'SAIDA' %} Saída (Paciente)
+                    {% elif auditoria.tipo_movimento == 'BAIXA' %} Baixa (Descarte)
+                    {% elif auditoria.tipo_movimento == 'MANUTENCAO' %} Manutenção
+                    {% else %} {{ auditoria.get_tipo_movimento_display }} {% endif %}
+                </p>
+                <p><strong>Identificador:</strong> {{ auditoria.identificador }}</p>
+                <p><strong>Excluído por:</strong> {{ auditoria.usuario.nome|default:auditoria.usuario.username }}</p>
+                <p><strong>Data da Exclusão:</strong> {{ auditoria.data_exclusao|date:"d/m/Y \à\s H:i:s" }}</p>
+            </div>
         </div>
     </div>
-</div>
 
-<h4 class="text-danger mt-4">Produtos que estavam nesta movimentação</h4>
-<div class="card border-0 shadow-sm mt-3">
-    <div class="card-body p-0">
-        <table class="table table-striped table-bordered mb-0">
-            <thead class="table-dark">
-                <tr>
-                    <th>Produto Apagado</th>
-                    <th>Quantidade Revertida no Estoque</th>
-                    <th>Lote</th>
-                    <th>Validade Original</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in auditoria.itens.all %}
-                <tr>
-                    <td class="fw-bold">{{ item.produto_nome }}</td>
-                    
-                    {% if auditoria.tipo_movimento == 'ENTRADA' %}
-                        <td class="text-danger fw-bold fs-5">-{{ item.quantidade }}</td>
-                    {% else %}
-                        <td class="text-success fw-bold fs-5">+{{ item.quantidade }}</td>
-                    {% endif %}
-                    
-                    <td>{{ item.lote|default:"-" }}</td>
-                    <td>{{ item.validade|default:"-" }}</td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="4" class="text-center py-4 text-muted">Nenhum produto foi encontrado neste registro.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div class="col-md-8 mb-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-dark text-white fw-bold">Itens que foram apagados e seus saldos revertidos</div>
+            <div class="card-body p-0">
+                <table class="table table-striped mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Produto</th>
+                            <th>Lote</th>
+                            <th>Validade</th>
+                            <th class="text-center">Quantidade Revertida</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in auditoria.itens.all %}
+                        <tr>
+                            <td class="fw-bold">{{ item.produto_nome }}</td>
+                            <td>{{ item.lote|default:"-" }}</td>
+                            <td>{{ item.validade|default:"-" }}</td>
+                            <td class="text-center fw-bold text-danger">{{ item.quantidade }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted">Nenhum item detalhado.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

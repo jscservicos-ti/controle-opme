@@ -1,0 +1,95 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 no-print">
+    <h3><i class="bi bi-search me-2 text-primary"></i> Detalhes da Manutenção #{{ manutencao.id }}</h3>
+    <div>
+        <button onclick="window.print()" class="btn btn-outline-secondary me-2"><i class="bi bi-printer"></i> Imprimir</button>
+        <a href="{% url 'manutencao_list' %}" class="btn btn-primary fw-bold">Voltar</a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-dark text-white fw-bold">Dados do Item</div>
+            <div class="card-body">
+                <p><strong>Produto:</strong> {{ manutencao.produto.nome }}</p>
+                <p><strong>Quantidade:</strong> {{ manutencao.quantidade }}</p>
+                <p><strong>Lote:</strong> {{ manutencao.lote|default:"-" }}</p>
+                <p><strong>Defeito Relatado:</strong> {{ manutencao.defeito.nome }}</p>
+                <p><strong>Especialidade:</strong> {{ manutencao.especialidade.nome }}</p>
+                <p><strong>Prontuário:</strong> {{ manutencao.prontuario|default:"Não informado" }}</p>
+                <hr>
+                
+                <p class="mb-2">
+                    <strong>Enviado por:</strong> 
+                    <span class="text-primary fw-bold">
+                        {{ manutencao.usuario_registro.nome|default:manutencao.usuario_registro.username }}
+                    </span>
+                    em {{ manutencao.data_registro|date:"d/m/Y \à\s H:i" }}
+                </p>
+                <p><strong>Data de Envio Física:</strong> {{ manutencao.data_envio|date:"d/m/Y" }}</p>
+                
+                {% if manutencao.usuario_conclusao %}
+                <hr>
+                <p class="mb-0">
+                    <strong>Concluído por:</strong> 
+                    <span class="text-success fw-bold">
+                        {{ manutencao.usuario_conclusao.nome|default:manutencao.usuario_conclusao.username }}
+                    </span>
+                    em {{ manutencao.data_conclusao|date:"d/m/Y \à\s H:i" }}
+                </p>
+                {% endif %}
+                
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 mb-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-dark text-white fw-bold">Status e Evidências</div>
+            <div class="card-body">
+                <div class="mb-4">
+                    <h5 class="fw-bold">Status Atual: 
+                        {% if manutencao.status == 'PENDENTE' %}
+                            <span class="badge bg-warning text-dark">Pendente (Na Assistência)</span>
+                        {% elif manutencao.status == 'REPARADO' %}
+                            <span class="badge bg-success">Concluído (Reparado e no Estoque)</span>
+                        {% else %}
+                            <span class="badge bg-danger">Concluído (Descartado)</span>
+                        {% endif %}
+                    </h5>
+                </div>
+
+                <div class="mb-3">
+                    <p class="fw-bold text-danger mb-1"><i class="bi bi-camera"></i> Evidência do Defeito (Envio)</p>
+                    {% if manutencao.foto_defeito %}
+                        <a href="{{ manutencao.foto_defeito.url }}" target="_blank">
+                            <img src="{{ manutencao.foto_defeito.url }}" class="img-thumbnail" style="max-height: 150px; cursor: pointer;" alt="Foto do Defeito">
+                        </a>
+                    {% else %}
+                        <span class="text-muted small">Sem foto registrada.</span>
+                    {% endif %}
+                </div>
+
+                {% if manutencao.status == 'REPARADO' %}
+                    <div class="mb-3 p-3 bg-success bg-opacity-10 border border-success rounded">
+                        <p class="fw-bold text-success mb-1"><i class="bi bi-camera"></i> Evidência do Reparo (Retorno)</p>
+                        {% if manutencao.foto_reparo %}
+                            <a href="{{ manutencao.foto_reparo.url }}" target="_blank">
+                                <img src="{{ manutencao.foto_reparo.url }}" class="img-thumbnail border-success" style="max-height: 150px; cursor: pointer;" alt="Foto do Reparo">
+                            </a>
+                        {% endif %}
+                    </div>
+                {% elif manutencao.status == 'DESCARTADO' %}
+                    <div class="mb-3 p-3 bg-danger bg-opacity-10 border border-danger rounded">
+                        <p class="fw-bold text-danger mb-1"><i class="bi bi-file-text"></i> Justificativa do Descarte</p>
+                        <p class="mb-0">{{ manutencao.justificativa_descarte }}</p>
+                    </div>
+                {% endif %}
+
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

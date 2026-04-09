@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Controle OPME</title>
+    <title>Controle Materiais Cirúrgicos</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <style>
@@ -14,7 +14,7 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 no-print shadow-sm">
         <div class="container-fluid px-4">
             <a class="navbar-brand fw-bold d-flex align-items-center" href="{% url 'index' %}">
-                <i class="bi bi-box-seam me-2 text-primary"></i> Controle OPME
+                <i class="bi bi-box-seam me-2 text-primary"></i> Controle Materiais Cirúrgicos
             </a>
             
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -31,7 +31,11 @@
                         <ul class="dropdown-menu shadow" aria-labelledby="cadastrosDropdown">
                             <li><a class="dropdown-item" href="{% url 'produto_list' %}">Produtos</a></li>
                             <li><a class="dropdown-item" href="{% url 'especie_list' %}">Espécies</a></li>
+                            <li><a class="dropdown-item" href="{% url 'marca_list' %}">Marcas</a></li>
                             <li><a class="dropdown-item" href="{% url 'motivo_list' %}">Motivos de Descarte</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'defeito_list' %}">Defeitos (Manutenção)</a></li>
+                            <li><a class="dropdown-item" href="{% url 'especialidade_list' %}">Especialidades (Manutenção)</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{% url 'fornecedor_list' %}">Fornecedores</a></li>
                         </ul>
@@ -42,10 +46,12 @@
                             <i class="bi bi-arrow-left-right me-1"></i> Movimentações
                         </a>
                         <ul class="dropdown-menu shadow" aria-labelledby="movimentacoesDropdown">
-                            <li><a class="dropdown-item text-success fw-bold" href="{% url 'entrada_list' %}"><i class="bi bi-box-arrow-in-down-right me-2"></i> Entradas (NF)</a></li>
+                            <li><a class="dropdown-item text-success fw-bold" href="{% url 'entrada_list' %}"><i class="bi bi-box-arrow-in-down-right me-2"></i> Entradas</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-warning fw-bold" href="{% url 'saida_list' %}"><i class="bi bi-person-heart me-2"></i> Saída Paciente</a></li>
                             <li><a class="dropdown-item text-danger fw-bold" href="{% url 'baixa_list' %}"><i class="bi bi-trash3 me-2"></i> Descarte</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-primary fw-bold" href="{% url 'manutencao_list' %}"><i class="bi bi-tools me-2"></i> Manutenção</a></li>
                         </ul>
                     </li>
                     

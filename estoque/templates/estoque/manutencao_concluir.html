@@ -1,0 +1,86 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<h3 class="mb-4 text-success"><i class="bi bi-check2-square me-2"></i> Concluir Manutenção #{{ manutencao.id }}</h3>
+
+<div class="card mb-4 border-secondary shadow-sm">
+    <div class="card-header bg-secondary text-white fw-bold">Resumo do Envio</div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3"><strong>Produto:</strong> <br>{{ manutencao.produto.nome }}</div>
+            <div class="col-md-2"><strong>Defeito:</strong> <br>{{ manutencao.defeito.nome }}</div>
+            <div class="col-md-3"><strong>Data Envio:</strong> <br>{{ manutencao.data_envio|date:"d/m/Y" }}</div>
+            <div class="col-md-4">
+                <strong>Foto do Defeito:</strong> <br>
+                <a href="{{ manutencao.foto_defeito.url }}" target="_blank" class="btn btn-sm btn-outline-primary mt-1">Ver Imagem</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<form method="post" enctype="multipart/form-data" novalidate>
+    {% csrf_token %}
+    <div class="card border-success shadow-sm mb-4">
+        <div class="card-header bg-success text-white fw-bold">Decisão Final</div>
+        <div class="card-body">
+            
+            <div class="mb-4 p-3 bg-light border rounded">
+                <label class="form-label fw-bold fs-5">O que aconteceu com o item?</label>
+                <div class="mt-2">
+                    {% for radio in form.acao %}
+                        <div class="form-check form-check-inline me-4 fs-5">
+                            {{ radio.tag }}
+                            <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div id="bloco-reparo" class="p-3 border border-success rounded bg-success bg-opacity-10 mb-3" style="display: none;">
+                <label class="form-label fw-bold text-success"><i class="bi bi-camera"></i> Foto do Item Reparado (Obrigatória)</label>
+                {{ form.foto_reparo }}
+                <div class="text-danger small fw-bold">{{ form.foto_reparo.errors }}</div>
+                <small class="text-muted">Anexando esta foto, o item será devolvido automaticamente ao saldo do estoque.</small>
+            </div>
+
+            <div id="bloco-descarte" class="p-3 border border-danger rounded bg-danger bg-opacity-10 mb-3" style="display: none;">
+                <label class="form-label fw-bold text-danger"><i class="bi bi-pencil"></i> Justificativa do Descarte (Obrigatória)</label>
+                {{ form.justificativa_descarte }}
+                <div class="text-danger small fw-bold">{{ form.justificativa_descarte.errors }}</div>
+                <small class="text-muted">O item permanecerá fora do estoque.</small>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="text-end mb-5">
+        <a href="{% url 'manutencao_list' %}" class="btn btn-secondary me-2">Cancelar</a>
+        <button type="submit" class="btn btn-success fw-bold btn-lg">Finalizar Processo</button>
+    </div>
+</form>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const radios = document.querySelectorAll('input[name="acao"]');
+        const blocoReparo = document.getElementById('bloco-reparo');
+        const blocoDescarte = document.getElementById('bloco-descarte');
+
+        function atualizarExibicao() {
+            let valorSelecionado = document.querySelector('input[name="acao"]:checked')?.value;
+            
+            if (valorSelecionado === 'reparar') {
+                blocoReparo.style.display = 'block';
+                blocoDescarte.style.display = 'none';
+            } else if (valorSelecionado === 'descartar') {
+                blocoReparo.style.display = 'none';
+                blocoDescarte.style.display = 'block';
+            } else {
+                blocoReparo.style.display = 'none';
+                blocoDescarte.style.display = 'none';
+            }
+        }
+
+        radios.forEach(radio => radio.addEventListener('change', atualizarExibicao));
+        atualizarExibicao(); // Executa ao carregar para caso de erro no formulário
+    });
+</script>
+{% endblock %}

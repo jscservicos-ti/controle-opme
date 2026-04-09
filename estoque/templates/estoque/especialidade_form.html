@@ -1,0 +1,30 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<h3 class="mb-4"><i class="bi bi-pencil-square me-2"></i> Cadastro de Especialidade</h3>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body">
+        <form method="post" novalidate>
+            {% csrf_token %}
+            <div class="row">
+                <div class="col-md-8 mb-3">
+                    <label class="form-label fw-bold">Nome da Especialidade</label>
+                    {{ form.nome }}
+                    <div class="text-danger small">{{ form.nome.errors }}</div>
+                </div>
+                <div class="col-md-4 mb-3 d-flex align-items-end pb-2">
+                    <div class="form-check form-switch fs-5">
+                        {{ form.ativo }}
+                        <label class="form-check-label fw-bold" for="{{ form.ativo.id_for_label }}">Cadastro Ativo?</label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-end mt-4">
+                <a href="{% url 'especialidade_list' %}" class="btn btn-secondary me-2">Cancelar</a>
+                <button type="submit" class="btn btn-success fw-bold">Salvar Especialidade</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

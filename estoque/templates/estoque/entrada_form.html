@@ -1,6 +1,6 @@
 {% extends 'estoque/base.html' %}
 {% block content %}
-<h3 class="mb-4">Registrar Entrada de Nota Fiscal</h3>
+<h3 class="mb-4">Registrar Entrada</h3>
 <form method="post" id="entrada-form" novalidate>
     {% csrf_token %}
     <div class="card mb-4 border-success">
@@ -41,7 +41,11 @@
                 <div class="item-form row mb-3 pb-3 border-bottom align-items-end">
                     {{ form_item.id }}
                     
-                    <div class="col-md-4">
+                    <div class="d-none">
+                        {% if form_item.DELETE %}{{ form_item.DELETE }}{% endif %}
+                    </div>
+                    
+                    <div class="col-md-3">
                         <label class="small">Produto</label>
                         {{ form_item.produto }}
                         <div class="text-danger small fw-bold">{{ form_item.produto.errors }}</div>
@@ -56,10 +60,15 @@
                         {{ form_item.lote }}
                         <div class="text-danger small fw-bold">{{ form_item.lote.errors }}</div>
                     </div>
-                    <div class="col-md-3 campo-validade" style="display:none;">
+                    <div class="col-md-2 campo-validade" style="display:none;">
                         <label class="small">Validade</label>
                         {{ form_item.validade }}
                         <div class="text-danger small fw-bold">{{ form_item.validade.errors }}</div>
+                    </div>
+                    <div class="col-md-2 text-end">
+                        <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removerProduto(this)">
+                            Remover
+                        </button>
                     </div>
                 </div>
                 {% endfor %}
@@ -76,7 +85,12 @@
 <div id="empty-form" style="display:none;">
     <div class="item-form row mb-3 pb-3 border-bottom align-items-end">
         {{ formset.empty_form.id }}
-        <div class="col-md-4">
+        
+        <div class="d-none">
+            {{ formset.empty_form.DELETE }}
+        </div>
+
+        <div class="col-md-3">
             <label class="small">Produto</label>
             {{ formset.empty_form.produto }}
         </div>
@@ -88,9 +102,14 @@
             <label class="small">Lote</label>
             {{ formset.empty_form.lote }}
         </div>
-        <div class="col-md-3 campo-validade" style="display:none;">
+        <div class="col-md-2 campo-validade" style="display:none;">
             <label class="small">Validade</label>
             {{ formset.empty_form.validade }}
+        </div>
+        <div class="col-md-2 text-end">
+            <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removerProduto(this)">
+                Remover
+            </button>
         </div>
     </div>
 </div>
@@ -134,5 +153,30 @@
             newSelect.addEventListener('change', () => atualizarCampos(newSelect));
         });
     });
+
+    // Função Nova: Remove o produto da interface e marca para o Django deletar no banco
+    function removerProduto(botao) {
+        const linha = botao.closest('.item-form');
+        const checkboxDelete = linha.querySelector('input[name$="-DELETE"]');
+        
+        // Esconde a linha da tela
+        linha.style.display = 'none';
+        
+        if (checkboxDelete) {
+            // É uma linha que já veio do banco de dados. Marcamos para o Django deletar.
+            checkboxDelete.checked = true;
+        } else {
+            // É uma linha nova. Limpamos TODOS os campos para o Django ignorar a linha completamente.
+            const inputs = linha.querySelectorAll('input, select, textarea');
+            inputs.forEach(input => {
+                input.value = ''; // Zera o valor
+                input.removeAttribute('required'); // Remove a obrigatoriedade do HTML
+                
+                if (input.type === 'checkbox' || input.type === 'radio') {
+                    input.checked = false;
+                }
+            });
+        }
+    }
 </script>
 {% endblock %}

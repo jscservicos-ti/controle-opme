@@ -1,5 +1,7 @@
 from django.urls import path
 from django.contrib.auth import views as auth_views
+from django.conf import settings
+from django.conf.urls.static import static
 from . import views
 
 urlpatterns = [
@@ -25,6 +27,7 @@ urlpatterns = [
     path('relatorios/entradas/', views.relatorio_entradas, name='relatorio_entradas'),
     path('relatorios/saidas/', views.relatorio_saidas, name='relatorio_saidas'),
     path('relatorios/baixas/', views.relatorio_baixas, name='relatorio_baixas'),
+    path('relatorios/manutencao/', views.relatorio_manutencao, name='relatorio_manutencao'),
 
     path('', views.index, name='index'),
     path('produtos/', views.produto_list, name='produto_list'),
@@ -38,6 +41,11 @@ urlpatterns = [
     path('especies/nova/', views.especie_form_view, name='especie_create'),
     path('especies/<int:id>/editar/', views.especie_form_view, name='especie_edit'),
     path('especies/<int:id>/excluir/', views.especie_delete, name='especie_delete'),
+
+    # --- ROTAS DE MARCAS ---
+    path('marcas/', views.marca_list, name='marca_list'),
+    path('marcas/nova/', views.marca_form_view, name='marca_create'),
+    path('marcas/<int:id>/editar/', views.marca_form_view, name='marca_edit'),
 
     path('fornecedores/', views.fornecedor_list, name='fornecedor_list'),
     path('fornecedores/novo/', views.fornecedor_form_view, name='fornecedor_create'),
@@ -66,5 +74,28 @@ urlpatterns = [
     path('baixas/<int:id>/editar/', views.baixa_edit, name='baixa_edit'),
     path('baixas/<int:id>/excluir/', views.baixa_delete, name='baixa_delete'),
 
+    # --- ROTAS DA MANUTENÇÃO ---
+    path('defeitos/', views.defeito_list, name='defeito_list'),
+    path('defeitos/novo/', views.defeito_form_view, name='defeito_create'),
+    path('defeitos/<int:id>/editar/', views.defeito_form_view, name='defeito_edit'),
+
+    path('especialidades/', views.especialidade_list, name='especialidade_list'),
+    path('especialidades/nova/', views.especialidade_form_view, name='especialidade_create'),
+    path('especialidades/<int:id>/editar/', views.especialidade_form_view, name='especialidade_edit'),
+
+    path('manutencao/', views.manutencao_list, name='manutencao_list'),
+    path('manutencao/nova/', views.manutencao_create, name='manutencao_create'),
+    path('manutencao/<int:id>/', views.manutencao_detail, name='manutencao_detail'),
+    path('manutencao/<int:id>/editar/', views.manutencao_edit, name='manutencao_edit'),   # <- NOVA
+    path('manutencao/<int:id>/excluir/', views.manutencao_delete, name='manutencao_delete'),
+    path('manutencao/<int:id>/concluir/', views.manutencao_concluir, name='manutencao_concluir'),
+
     path('api/lotes/<int:id>/', views.api_lotes_produto, name='api_lotes_produto'),
 ]
+
+# Configuração para o Django servir as fotos no ambiente de desenvolvimento local
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
+path('manutencao/<int:id>/editar/', views.manutencao_edit, name='manutencao_edit'),
+path('manutencao/<int:id>/excluir/', views.manutencao_delete, name='manutencao_delete'),

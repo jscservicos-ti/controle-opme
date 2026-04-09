@@ -1,0 +1,84 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3><i class="bi bi-tools me-2 text-primary"></i> Controle de Manutenção</h3>
+    
+    <div class="d-flex gap-2">
+        <form method="get" class="d-flex">
+            <select name="status" class="form-select border-primary text-primary fw-bold bg-light shadow-sm" onchange="this.form.submit()">
+                <option value="">Todos os Status</option>
+                <option value="pendente" {% if status_filter == 'pendente' %}selected{% endif %}>⏳ Apenas Pendentes</option>
+                <option value="concluido" {% if status_filter == 'concluido' %}selected{% endif %}>✅ Já Concluídos</option>
+            </select>
+        </form>
+        
+        <a href="{% url 'manutencao_create' %}" class="btn btn-primary fw-bold text-nowrap shadow-sm">
+            <i class="bi bi-plus-lg"></i> Enviar Item
+        </a>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped mb-0 align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Data Envio</th>
+                        <th>Produto</th>
+                        <th>Defeito</th>
+                        <th>Prontuário</th>
+                        <th>Status</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in manutencoes %}
+                    <tr>
+                        <td class="fw-bold">#{{ m.id }}</td>
+                        <td>{{ m.data_envio|date:"d/m/Y" }}</td>
+                        <td>{{ m.produto.nome }} <br><small class="text-muted">Qtd: {{ m.quantidade }}</small></td>
+                        <td>{{ m.defeito.nome }} <br><small class="text-muted">{{ m.especialidade.nome }}</small></td>
+                        <td>{{ m.prontuario|default:"-" }}</td>
+                        <td>
+                            {% if m.status == 'PENDENTE' %}
+                                <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> Pendente</span>
+                            {% elif m.status == 'REPARADO' %}
+                                <span class="badge bg-success"><i class="bi bi-check-circle"></i> Reparado</span>
+                            {% else %}
+                                <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Descartado</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center text-nowrap">
+                            <a href="{% url 'manutencao_detail' m.id %}" class="btn btn-sm btn-outline-primary fw-bold" title="Detalhes">
+                                <i class="bi bi-search"></i>
+                            </a>
+                            
+                            {% if m.status == 'PENDENTE' %}
+                                <a href="{% url 'manutencao_edit' m.id %}" class="btn btn-sm btn-outline-secondary fw-bold" title="Editar">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <a href="{% url 'manutencao_delete' m.id %}" class="btn btn-sm btn-outline-danger fw-bold" title="Excluir (Cancela o Envio)">
+                                    <i class="bi bi-trash"></i>
+                                </a>
+                                <a href="{% url 'manutencao_concluir' m.id %}" class="btn btn-sm btn-success fw-bold ms-1">
+                                    <i class="bi bi-check2-square"></i> Concluir
+                                </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                            Nenhum registro de manutenção encontrado para este filtro.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
