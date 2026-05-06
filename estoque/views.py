@@ -143,25 +143,19 @@ def usuario_reset_senha(request, id):
     return render(request, 'estoque/confirmar_exclusao.html', {'item': f'o RESET de senha do usuário {user.username}', 'url_cancelar': 'usuario_list'})
 
 # --- DASHBOARD ---
-# --- DASHBOARD ---
 @login_required
 def index(request):
     empresa_id = request.session.get('empresa_id')
     zerados = Estoque.objects.filter(empresa_id=empresa_id, quantidade__lte=0).count()
     zerados += Produto.objects.filter(ativo=True).exclude(estoques__empresa_id=empresa_id).count()
     
-    # Conta a quantidade total de itens físicos (peças) que estão atualmente na manutenção
-    itens_em_manutencao = Manutencao.objects.filter(empresa_id=empresa_id, status='PENDENTE').aggregate(total=Sum('quantidade'))['total'] or 0
-    
     context = {
         'total_produtos': Produto.objects.filter(ativo=True).count(),
         'produtos_zerados': zerados,
         'total_fornecedores': Fornecedor.objects.filter(ativo=True).count(),
-        'itens_em_manutencao': itens_em_manutencao, # Nova variável para as caixas do topo
         'ultimas_entradas': Entrada.objects.filter(empresa_id=empresa_id).order_by('-data_entrada')[:5],
         'ultimas_saidas': Saida.objects.filter(empresa_id=empresa_id).order_by('-data_saida')[:5],
         'ultimas_baixas': Baixa.objects.filter(empresa_id=empresa_id).order_by('-data_baixa')[:5],
-        'ultimas_manutencoes': Manutencao.objects.filter(empresa_id=empresa_id).order_by('-data_registro')[:5], # Nova variável para a lista
     }
     return render(request, 'estoque/index.html', context)
 
@@ -380,11 +374,16 @@ def entrada_create(request):
         form = EntradaForm(request.POST)
         formset = ItemEntradaFormSet(request.POST)
         if form.is_valid() and formset.is_valid():
-            with transaction.atomic():
-                entrada = form.save(commit=False)
-                entrada.empresa = empresa
-                entrada.usuario_registro = request.user
-                entrada.save()
+                with transaction.atomic():
+                    entrada = form.save(commit=False)
+                    
+                    # CORREÇÃO: Previne o erro NOT NULL da Nota Fiscal
+                    if not entrada.nota_fiscal:
+                        entrada.nota_fiscal = "S/N"
+                        
+                    entrada.empresa = empresa
+                    entrada.usuario_registro = request.user
+                    entrada.save()
                 formset.instance = entrada
                 itens = formset.save()
                 
@@ -415,10 +414,16 @@ def entrada_edit(request, id):
         form = EntradaForm(request.POST, instance=entrada)
         formset = ItemEntradaFormSet(request.POST, instance=entrada)
         if form.is_valid() and formset.is_valid():
-            with transaction.atomic():
-                detalhes = gerar_detalhes_edicao(form, formset)
-                form.save()
-                itens_salvos = formset.save()
+                with transaction.atomic():
+                    detalhes = gerar_detalhes_edicao(form, formset)
+                    
+                    # CORREÇÃO: Intercepta e protege antes de salvar a edição
+                    entrada = form.save(commit=False)
+                    if not entrada.nota_fiscal:
+                        entrada.nota_fiscal = "S/N"
+                    entrada.save()
+                    
+                    itens_salvos = formset.save()
                 HistoricoEntrada.objects.create(entrada=entrada, usuario=request.user, detalhes=detalhes)
                 
                 # Recalcula o estoque de quem ficou, de quem estava antes, e de quem foi deletado
@@ -712,136 +717,61 @@ def relatorio_kardex(request):
 @login_required
 def relatorio_entradas(request):
     empresa_id = request.session.get('empresa_id')
-    
-    # Resiliência: captura a data não importa como o HTML envie
-    dt_ini = request.GET.get('data_inicial') or request.POST.get('data_inicial') or request.GET.get('data_inicio') or request.POST.get('data_inicio')
-    dt_fim = request.GET.get('data_final') or request.POST.get('data_final') or request.GET.get('data_fim') or request.POST.get('data_fim')
-    
-    context = {
-        'produtos': Produto.objects.filter(ativo=True).order_by('nome'), 
-        'especies': Especie.objects.filter(ativo=True).order_by('nome'), 
-        'produto_id': request.GET.get('produto', '') or request.POST.get('produto', ''), 
-        'especie_id': request.GET.get('especie', '') or request.POST.get('especie', ''), 
-        'data_inicial': dt_ini, 
-        'data_final': dt_fim
-    }
-    
-    if context['data_inicial'] and context['data_final']:
+    context = {'produtos': Produto.objects.filter(ativo=True).order_by('nome'), 'especies': Especie.objects.filter(ativo=True).order_by('nome'), 'produto_id': request.GET.get('produto', ''), 'especie_id': request.GET.get('especie', ''), 'data_inicial': request.GET.get('data_inicial'), 'data_final': request.GET.get('data_final')}
+    if context['data_inicial']:
         d_ini = make_aware(datetime.strptime(context['data_inicial'], '%Y-%m-%d'))
         d_fim = make_aware(datetime.strptime(context['data_final'], '%Y-%m-%d').replace(hour=23, minute=59, second=59))
-        
         q = ItemEntrada.objects.filter(entrada__empresa_id=empresa_id, entrada__data_entrada__range=(d_ini, d_fim)).order_by('entrada__data_entrada')
-        
-        # Mantendo seus filtros originais
         if context['especie_id']: q = q.filter(produto__especie_id=context['especie_id'])
         if context['produto_id']: q = q.filter(produto_id=context['produto_id'])
-        
-        context.update({
-            'itens': q, 
-            'total_qtd': sum(i.quantidade for i in q), 
-            'data_inicial_formatada': d_ini.strftime('%d/%m/%Y'), 
-            'data_final_formatada': d_fim.strftime('%d/%m/%Y'), 
-            'produto_selecionado': get_object_or_404(Produto, id=context['produto_id']) if context['produto_id'] else None, 
-            'especie_selecionada': get_object_or_404(Especie, id=context['especie_id']) if context['especie_id'] else None
-        })
-        
+        context.update({'itens': q, 'total_qtd': sum(i.quantidade for i in q), 'data_inicial_formatada': d_ini.strftime('%d/%m/%Y'), 'data_final_formatada': d_fim.strftime('%d/%m/%Y'), 'produto_selecionado': get_object_or_404(Produto, id=context['produto_id']) if context['produto_id'] else None, 'especie_selecionada': get_object_or_404(Especie, id=context['especie_id']) if context['especie_id'] else None})
     return render(request, 'estoque/relatorio_entradas.html', context)
 
 @login_required
 def relatorio_saidas(request):
     empresa_id = request.session.get('empresa_id')
-    
-    dt_ini = request.GET.get('data_inicial') or request.POST.get('data_inicial') or request.GET.get('data_inicio') or request.POST.get('data_inicio')
-    dt_fim = request.GET.get('data_final') or request.POST.get('data_final') or request.GET.get('data_fim') or request.POST.get('data_fim')
-    
-    context = {
-        'produtos': Produto.objects.filter(ativo=True).order_by('nome'), 
-        'especies': Especie.objects.filter(ativo=True).order_by('nome'), 
-        'produto_id': request.GET.get('produto', '') or request.POST.get('produto', ''), 
-        'especie_id': request.GET.get('especie', '') or request.POST.get('especie', ''), 
-        'data_inicial': dt_ini, 
-        'data_final': dt_fim
-    }
-    
-    if context['data_inicial'] and context['data_final']:
+    context = {'produtos': Produto.objects.filter(ativo=True).order_by('nome'), 'especies': Especie.objects.filter(ativo=True).order_by('nome'), 'produto_id': request.GET.get('produto', ''), 'especie_id': request.GET.get('especie', ''), 'data_inicial': request.GET.get('data_inicial'), 'data_final': request.GET.get('data_final')}
+    if context['data_inicial']:
         d_ini = make_aware(datetime.strptime(context['data_inicial'], '%Y-%m-%d'))
         d_fim = make_aware(datetime.strptime(context['data_final'], '%Y-%m-%d').replace(hour=23, minute=59, second=59))
-        
         q = ItemSaida.objects.filter(saida__empresa_id=empresa_id, saida__data_saida__range=(d_ini, d_fim)).order_by('saida__data_saida')
-        
         if context['especie_id']: q = q.filter(produto__especie_id=context['especie_id'])
         if context['produto_id']: q = q.filter(produto_id=context['produto_id'])
-        
-        context.update({
-            'itens': q, 
-            'total_qtd': sum(i.quantidade for i in q), 
-            'data_inicial_formatada': d_ini.strftime('%d/%m/%Y'), 
-            'data_final_formatada': d_fim.strftime('%d/%m/%Y'), 
-            'produto_selecionado': get_object_or_404(Produto, id=context['produto_id']) if context['produto_id'] else None, 
-            'especie_selecionada': get_object_or_404(Especie, id=context['especie_id']) if context['especie_id'] else None
-        })
-        
+        context.update({'itens': q, 'total_qtd': sum(i.quantidade for i in q), 'data_inicial_formatada': d_ini.strftime('%d/%m/%Y'), 'data_final_formatada': d_fim.strftime('%d/%m/%Y'), 'produto_selecionado': get_object_or_404(Produto, id=context['produto_id']) if context['produto_id'] else None, 'especie_selecionada': get_object_or_404(Especie, id=context['especie_id']) if context['especie_id'] else None})
     return render(request, 'estoque/relatorio_saidas.html', context)
 
 @login_required
 def relatorio_baixas(request):
     empresa_id = request.session.get('empresa_id')
-    
-    dt_ini = request.GET.get('data_inicial') or request.POST.get('data_inicial') or request.GET.get('data_inicio') or request.POST.get('data_inicio')
-    dt_fim = request.GET.get('data_final') or request.POST.get('data_final') or request.GET.get('data_fim') or request.POST.get('data_fim')
-    
-    context = {
-        'produtos': Produto.objects.filter(ativo=True).order_by('nome'), 
-        'especies': Especie.objects.filter(ativo=True).order_by('nome'), 
-        'motivos': MotivoBaixa.objects.all(),
-        'produto_id': request.GET.get('produto', '') or request.POST.get('produto', ''), 
-        'especie_id': request.GET.get('especie', '') or request.POST.get('especie', ''), 
-        'motivo_id': request.GET.get('motivo', '') or request.POST.get('motivo', ''),
-        'data_inicial': dt_ini, 
-        'data_final': dt_fim
-    }
-    
-    if context['data_inicial'] and context['data_final']:
+    context = {'produtos': Produto.objects.filter(ativo=True).order_by('nome'), 'especies': Especie.objects.filter(ativo=True).order_by('nome'), 'motivos': MotivoBaixa.objects.all(), 'produto_id': request.GET.get('produto', ''), 'especie_id': request.GET.get('especie', ''), 'motivo_id': request.GET.get('motivo', ''), 'data_inicial': request.GET.get('data_inicial'), 'data_final': request.GET.get('data_final')}
+    if context['data_inicial']:
         d_ini = make_aware(datetime.strptime(context['data_inicial'], '%Y-%m-%d'))
         d_fim = make_aware(datetime.strptime(context['data_final'], '%Y-%m-%d').replace(hour=23, minute=59, second=59))
-        
         q = ItemBaixa.objects.filter(baixa__empresa_id=empresa_id, baixa__data_baixa__range=(d_ini, d_fim)).order_by('baixa__data_baixa')
-        
         if context['motivo_id']: q = q.filter(baixa__motivo_id=context['motivo_id'])
         if context['especie_id']: q = q.filter(produto__especie_id=context['especie_id'])
         if context['produto_id']: q = q.filter(produto_id=context['produto_id'])
-        
-        context.update({
-            'itens': q, 
-            'total_qtd': sum(i.quantidade for i in q), 
-            'data_inicial_formatada': d_ini.strftime('%d/%m/%Y'), 
-            'data_final_formatada': d_fim.strftime('%d/%m/%Y'), 
-            'produto_selecionado': get_object_or_404(Produto, id=context['produto_id']) if context['produto_id'] else None, 
-            'especie_selecionada': get_object_or_404(Especie, id=context['especie_id']) if context['especie_id'] else None, 
-            'motivo_selecionado': get_object_or_404(MotivoBaixa, id=context['motivo_id']) if context['motivo_id'] else None
-        })
-        
-    return render(request, 'estoque/relatorio_baixas.html', context)
+        context.update({'itens': q, 'total_qtd': sum(i.quantidade for i in q), 'data_inicial_formatada': d_ini.strftime('%d/%m/%Y'), 'data_final_formatada': d_fim.strftime('%d/%m/%Y'), 'produto_selecionado': get_object_or_404(Produto, id=context['produto_id']) if context['produto_id'] else None, 'especie_selecionada': get_object_or_404(Especie, id=context['especie_id']) if context['especie_id'] else None, 'motivo_selecionado': get_object_or_404(MotivoBaixa, id=context['motivo_id']) if context['motivo_id'] else None})
+    return render(request, 'estoque/relatorio_baixas.html', context) 
 
 @login_required
 def relatorio_manutencao(request):
     empresa_id = request.session.get('empresa_id')
     
-    dt_ini = request.GET.get('data_inicial') or request.POST.get('data_inicial') or request.GET.get('data_inicio') or request.POST.get('data_inicio')
-    dt_fim = request.GET.get('data_final') or request.POST.get('data_final') or request.GET.get('data_fim') or request.POST.get('data_fim')
-    
     context = {
-        'data_inicial': dt_ini, 
-        'data_final': dt_fim,
-        'status_filter': request.GET.get('status', '') or request.POST.get('status', '')
+        'data_inicial': request.GET.get('data_inicial'), 
+        'data_final': request.GET.get('data_final'),
+        'status_filter': request.GET.get('status', '')
     }
     
     if context['data_inicial'] and context['data_final']:
         d_ini = make_aware(datetime.strptime(context['data_inicial'], '%Y-%m-%d'))
         d_fim = make_aware(datetime.strptime(context['data_final'], '%Y-%m-%d').replace(hour=23, minute=59, second=59))
         
+        # Filtra pela data de envio físico
         q = Manutencao.objects.filter(empresa_id=empresa_id, data_envio__range=(d_ini.date(), d_fim.date())).order_by('data_envio')
         
+        # Aplica o filtro de status se o usuário selecionou um
         if context['status_filter']:
             q = q.filter(status=context['status_filter'])
             
