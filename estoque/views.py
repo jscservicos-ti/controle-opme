@@ -374,16 +374,17 @@ def entrada_create(request):
         form = EntradaForm(request.POST)
         formset = ItemEntradaFormSet(request.POST)
         if form.is_valid() and formset.is_valid():
-                with transaction.atomic():
-                    entrada = form.save(commit=False)
+            with transaction.atomic():
+                entrada = form.save(commit=False)
+                
+                # CORREÇÃO: Previne o erro NOT NULL da Nota Fiscal
+                if not entrada.nota_fiscal:
+                    entrada.nota_fiscal = "S/N"
                     
-                    # CORREÇÃO: Previne o erro NOT NULL da Nota Fiscal
-                    if not entrada.nota_fiscal:
-                        entrada.nota_fiscal = "S/N"
-                        
-                    entrada.empresa = empresa
-                    entrada.usuario_registro = request.user
-                    entrada.save()
+                entrada.empresa = empresa
+                entrada.usuario_registro = request.user
+                entrada.save()
+                
                 formset.instance = entrada
                 itens = formset.save()
                 
@@ -398,32 +399,36 @@ def entrada_create(request):
         formset = ItemEntradaFormSet()
         form.fields['fornecedor'].queryset = Fornecedor.objects.filter(ativo=True)
         for f in formset.forms: f.fields['produto'].queryset = Produto.objects.filter(ativo=True)
+        
     regras = {p.id: {'lote': p.controla_lote, 'validade': p.controla_validade} for p in Produto.objects.filter(ativo=True)}
     return render(request, 'estoque/entrada_form.html', {'form': form, 'formset': formset, 'produtos_regras_json': json.dumps(regras)})
+
 
 @login_required
 def entrada_edit(request, id):
     empresa = get_object_or_404(Empresa, id=request.session['empresa_id'])
     entrada = get_object_or_404(Entrada, id=id, empresa=empresa)
-    if not check_movimento_bloqueado(entrada): messages.error(request, 'Bloqueado'); return redirect('entrada_list')
+    if not check_movimento_bloqueado(entrada): 
+        messages.error(request, 'Bloqueado')
+        return redirect('entrada_list')
     
-    # Guarda o estado original dos produtos ANTES do POST para garantir que estoques excluídos sejam recalculados
+    # Guarda o estado original dos produtos ANTES do POST
     produtos_originais = list(entrada.itens.all()) 
     
     if request.method == 'POST':
         form = EntradaForm(request.POST, instance=entrada)
         formset = ItemEntradaFormSet(request.POST, instance=entrada)
         if form.is_valid() and formset.is_valid():
-                with transaction.atomic():
-                    detalhes = gerar_detalhes_edicao(form, formset)
-                    
-                    # CORREÇÃO: Intercepta e protege antes de salvar a edição
-                    entrada = form.save(commit=False)
-                    if not entrada.nota_fiscal:
-                        entrada.nota_fiscal = "S/N"
-                    entrada.save()
-                    
-                    itens_salvos = formset.save()
+            with transaction.atomic():
+                detalhes = gerar_detalhes_edicao(form, formset)
+                
+                # CORREÇÃO: Intercepta e protege antes de salvar a edição
+                entrada_obj = form.save(commit=False)
+                if not entrada_obj.nota_fiscal:
+                    entrada_obj.nota_fiscal = "S/N"
+                entrada_obj.save()
+                
+                itens_salvos = formset.save()
                 HistoricoEntrada.objects.create(entrada=entrada, usuario=request.user, detalhes=detalhes)
                 
                 # Recalcula o estoque de quem ficou, de quem estava antes, e de quem foi deletado
@@ -437,6 +442,7 @@ def entrada_edit(request, id):
         formset = ItemEntradaFormSet(instance=entrada)
         form.fields['fornecedor'].queryset = Fornecedor.objects.filter(ativo=True)
         for f in formset.forms: f.fields['produto'].queryset = Produto.objects.filter(ativo=True)
+        
     regras = {p.id: {'lote': p.controla_lote, 'validade': p.controla_validade} for p in Produto.objects.filter(ativo=True)}
     return render(request, 'estoque/entrada_form.html', {'form': form, 'formset': formset, 'produtos_regras_json': json.dumps(regras)})
 
