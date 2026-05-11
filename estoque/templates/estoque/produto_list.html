@@ -65,7 +65,7 @@
                     <td><strong>{{ produto.id }}</strong></td>
                     <td>{{ produto.nome }}</td>
                     <td>{{ produto.especie.nome }}</td>
-                    <td>{{ produto.quantidade_em_estoque }}</td>
+                    <td class="fw-bold">{{ produto.saldo_empresa }}</td> 
                     <td>
                         {% if produto.ativo %}<span class="badge bg-success">Ativo</span>
                         {% else %}<span class="badge bg-secondary">Inativo</span>{% endif %}

@@ -146,16 +146,31 @@ def usuario_reset_senha(request, id):
 @login_required
 def index(request):
     empresa_id = request.session.get('empresa_id')
+    
+    # Produtos zerados (físico zerado ou sem registro na empresa)
     zerados = Estoque.objects.filter(empresa_id=empresa_id, quantidade__lte=0).count()
     zerados += Produto.objects.filter(ativo=True).exclude(estoques__empresa_id=empresa_id).count()
     
+    # SOMA O TOTAL DE PEÇAS NO ESTOQUE DA EMPRESA
+    total_pecas_estoque = Estoque.objects.filter(
+        empresa_id=empresa_id
+    ).aggregate(total=Sum('quantidade'))['total'] or 0
+    
+    # Conta a quantidade total de itens físicos (peças) que estão atualmente na manutenção
+    itens_em_manutencao = Manutencao.objects.filter(
+        empresa_id=empresa_id, status='PENDENTE'
+    ).aggregate(total=Sum('quantidade'))['total'] or 0
+    
     context = {
-        'total_produtos': Produto.objects.filter(ativo=True).count(),
+        'total_produtos': total_pecas_estoque, # <--- Agora mostra o volume total de peças
         'produtos_zerados': zerados,
         'total_fornecedores': Fornecedor.objects.filter(ativo=True).count(),
+        'itens_em_manutencao': itens_em_manutencao,
+        
         'ultimas_entradas': Entrada.objects.filter(empresa_id=empresa_id).order_by('-data_entrada')[:5],
         'ultimas_saidas': Saida.objects.filter(empresa_id=empresa_id).order_by('-data_saida')[:5],
         'ultimas_baixas': Baixa.objects.filter(empresa_id=empresa_id).order_by('-data_baixa')[:5],
+        'ultimas_manutencoes': Manutencao.objects.filter(empresa_id=empresa_id).order_by('-data_registro')[:5],
     }
     return render(request, 'estoque/index.html', context)
 
