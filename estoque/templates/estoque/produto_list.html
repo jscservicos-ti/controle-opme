@@ -10,20 +10,28 @@
 
 <form method="get" class="card p-3 mb-4 bg-light border-0 shadow-sm">
     <div class="row g-2 align-items-end">
-        <div class="col-md-4">
-            <label class="small text-muted">Pesquisar por Código ou Nome</label>
-            <input type="text" name="q" class="form-control" value="{{ q }}" placeholder="Ex: Fio Cirúrgico ou 15">
+        <div class="col-md-3">
+            <label class="small text-muted">Pesquisar</label>
+            <input type="text" name="q" class="form-control" value="{{ q }}" placeholder="Ex: Fio ou 15">
         </div>
         <div class="col-md-3">
             <label class="small text-muted">Espécie</label>
             <select name="especie" class="form-select">
-                <option value="">Todas as Espécies</option>
+                <option value="">Todas</option>
                 {% for e in especies %}
                 <option value="{{ e.id }}" {% if especie_id == e.id|stringformat:"s" %}selected{% endif %}>{{ e.nome }}</option>
                 {% endfor %}
             </select>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
+            <label class="small text-muted">Estoque</label>
+            <select name="estoque_filtro" class="form-select">
+                <option value="">Todos</option>
+                <option value="com_estoque" {% if estoque_filtro == 'com_estoque' %}selected{% endif %}>Com Estoque</option>
+                <option value="zerados" {% if estoque_filtro == 'zerados' %}selected{% endif %}>Zerados</option>
+            </select>
+        </div>
+        <div class="col-md-2">
             <label class="small text-muted">Status</label>
             <select name="status" class="form-select">
                 <option value="">Todos</option>
@@ -44,12 +52,12 @@
             <thead class="table-dark">
                 <tr>
                     <th>
-                        <a href="?q={{ q }}&status={{ status }}&especie={{ especie_id }}&sort={% if sort == 'id' %}-id{% else %}id{% endif %}" class="text-white text-decoration-none">
+                        <a href="?q={{ q }}&status={{ status }}&especie={{ especie_id }}&estoque_filtro={{ estoque_filtro }}&sort={% if sort == 'id' %}-id{% else %}id{% endif %}" class="text-white text-decoration-none">
                             Cód {% if sort == 'id' %}↑{% elif sort == '-id' %}↓{% endif %}
                         </a>
                     </th>
                     <th>
-                        <a href="?q={{ q }}&status={{ status }}&especie={{ especie_id }}&sort={% if sort == 'nome' %}-nome{% else %}nome{% endif %}" class="text-white text-decoration-none">
+                        <a href="?q={{ q }}&status={{ status }}&especie={{ especie_id }}&estoque_filtro={{ estoque_filtro }}&sort={% if sort == 'nome' %}-nome{% else %}nome{% endif %}" class="text-white text-decoration-none">
                             Nome do Produto {% if sort == 'nome' %}↑{% elif sort == '-nome' %}↓{% endif %}
                         </a>
                     </th>

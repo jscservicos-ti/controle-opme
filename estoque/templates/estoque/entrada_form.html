@@ -1,5 +1,9 @@
 {% extends 'estoque/base.html' %}
 {% block content %}
+
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
+
 <h3 class="mb-4">Registrar Entrada</h3>
 <form method="post" id="entrada-form" novalidate>
     {% csrf_token %}
@@ -137,40 +141,61 @@
             }
         }
 
+        // Função para transformar o select normal em um select com pesquisa
+        function aplicarBusca(selectElement) {
+            new TomSelect(selectElement, {
+                create: false,
+                placeholder: "Pesquise cód. ou nome...",
+                onChange: function() {
+                    // Quando o usuário selecionar algo, atualiza os campos de Lote/Validade
+                    atualizarCampos(selectElement);
+                }
+            });
+        }
+
+        // Aplica a busca nos campos de produto que já vieram carregados na tela
         document.querySelectorAll('.item-form select[name$="-produto"]').forEach(s => {
             if(!s.id.includes('__prefix__')){
-                s.addEventListener('change', () => atualizarCampos(s));
+                aplicarBusca(s);
                 atualizarCampos(s);
             }
         });
 
+        // Evento de adicionar nova linha
         btnAdd.addEventListener('click', function() {
             let count = parseInt(totalForms.value);
             container.insertAdjacentHTML('beforeend', emptyForm.replace(/__prefix__/g, count));
             totalForms.value = count + 1;
+            
             const newSelects = container.querySelectorAll('.item-form select[name$="-produto"]');
             const newSelect = newSelects[newSelects.length - 1];
-            newSelect.addEventListener('change', () => atualizarCampos(newSelect));
+            
+            // Aplica a barra de busca no campo que acabou de ser criado
+            aplicarBusca(newSelect);
+            atualizarCampos(newSelect);
         });
     });
 
-    // Função Nova: Remove o produto da interface e marca para o Django deletar no banco
+    // Função que remove o produto
     function removerProduto(botao) {
         const linha = botao.closest('.item-form');
         const checkboxDelete = linha.querySelector('input[name$="-DELETE"]');
         
-        // Esconde a linha da tela
         linha.style.display = 'none';
         
         if (checkboxDelete) {
-            // É uma linha que já veio do banco de dados. Marcamos para o Django deletar.
             checkboxDelete.checked = true;
         } else {
-            // É uma linha nova. Limpamos TODOS os campos para o Django ignorar a linha completamente.
             const inputs = linha.querySelectorAll('input, select, textarea');
             inputs.forEach(input => {
-                input.value = ''; // Zera o valor
-                input.removeAttribute('required'); // Remove a obrigatoriedade do HTML
+                // Se for um campo modificado pelo TomSelect, ele tem um jeito especial de ser limpo
+                if (input.tomselect) {
+                    input.tomselect.clear();
+                } else {
+                    input.value = ''; 
+                }
+                
+                input.removeAttribute('required'); 
                 
                 if (input.type === 'checkbox' || input.type === 'radio') {
                     input.checked = false;

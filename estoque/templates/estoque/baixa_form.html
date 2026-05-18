@@ -1,5 +1,9 @@
 {% extends 'estoque/base.html' %}
 {% block content %}
+
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
+
 <h3 class="mb-4 text-danger">Registrar Baixa por Descarte/Perda</h3>
 <form method="post" id="baixa-form" novalidate>
     {% csrf_token %}
@@ -170,20 +174,36 @@
             }
         }
 
+        // --- FUNÇÃO DO TOM SELECT ---
+        function aplicarBusca(selectElement) {
+            new TomSelect(selectElement, {
+                create: false,
+                placeholder: "Pesquise cód. ou nome...",
+                onChange: function(value) {
+                    // Atualiza os lotes disponíveis ao selecionar
+                    atualizarLote(selectElement);
+                }
+            });
+        }
+
+        // Aplica a barra de busca nos itens que já carregaram na tela
         document.querySelectorAll('.item-form select[name$="-produto"]').forEach(s => {
             if(!s.id.includes('__prefix__')){ 
-                s.addEventListener('change', () => atualizarLote(s)); 
+                aplicarBusca(s); 
                 atualizarLote(s); 
             }
         });
 
+        // Adiciona a barra de busca na nova linha quando o botão "+ Adicionar Linha" for clicado
         btnAdd.addEventListener('click', function() {
             let count = parseInt(totalForms.value);
             container.insertAdjacentHTML('beforeend', emptyForm.replace(/__prefix__/g, count));
             totalForms.value = count + 1;
+            
             const newSelects = container.querySelectorAll('.item-form select[name$="-produto"]');
             const newSelect = newSelects[newSelects.length - 1];
-            newSelect.addEventListener('change', () => atualizarLote(newSelect));
+            
+            aplicarBusca(newSelect);
         });
     });
 </script>

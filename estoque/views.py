@@ -190,14 +190,27 @@ def produto_list(request):
     empresa_id = request.session.get('empresa_id')
     produtos = Produto.objects.all()
     q = request.GET.get('q', '')
+    
     if q:
         if q.isdigit(): produtos = produtos.filter(Q(id=q) | Q(nome__icontains=q))
         else: produtos = produtos.filter(nome__icontains=q)
+        
     status = request.GET.get('status', '')
     if status == 'ativo': produtos = produtos.filter(ativo=True)
     elif status == 'inativo': produtos = produtos.filter(ativo=False)
+    
     especie_id = request.GET.get('especie', '')
     if especie_id: produtos = produtos.filter(especie_id=especie_id)
+    
+    # --- NOVO FILTRO DE ESTOQUE ---
+    estoque_filtro = request.GET.get('estoque_filtro', '')
+    if estoque_filtro == 'com_estoque':
+        # Filtra apenas os que têm registro no estoque DA EMPRESA ATUAL com saldo > 0
+        produtos = produtos.filter(estoques__empresa_id=empresa_id, estoques__quantidade__gt=0)
+    elif estoque_filtro == 'zerados':
+        # Exclui todos que têm saldo > 0 na empresa atual (sobrando só os zerados ou não registrados nela)
+        produtos = produtos.exclude(estoques__empresa_id=empresa_id, estoques__quantidade__gt=0)
+    
     sort = request.GET.get('sort', 'id')
     if sort in ['id', '-id', 'nome', '-nome']: produtos = produtos.order_by(sort)
 
@@ -205,7 +218,16 @@ def produto_list(request):
         estoque = Estoque.objects.filter(produto=p, empresa_id=empresa_id).first()
         p.saldo_empresa = estoque.quantidade if estoque else 0
 
-    return render(request, 'estoque/produto_list.html', {'produtos': produtos, 'especies': Especie.objects.all(), 'q': q, 'status': status, 'especie_id': especie_id, 'sort': sort})
+    context = {
+        'produtos': produtos, 
+        'especies': Especie.objects.all(), 
+        'q': q, 
+        'status': status, 
+        'especie_id': especie_id, 
+        'estoque_filtro': estoque_filtro, # Envia o filtro para manter selecionado no HTML
+        'sort': sort
+    }
+    return render(request, 'estoque/produto_list.html', context)
 
 @login_required
 def produto_export(request):
