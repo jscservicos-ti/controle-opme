@@ -1,0 +1,30 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-6">
+        <div class="card border-danger shadow">
+            <div class="card-header bg-danger text-white fw-bold">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i> Confirmar Exclusão de Saída
+            </div>
+            <div class="card-body text-center p-4">
+                <h4 class="mb-4">Tem certeza que deseja excluir o consumo deste paciente?</h4>
+                <p class="text-muted mb-4">
+                    <strong>Paciente:</strong> {{ saida.paciente }}<br>
+                    <strong>Atendimento:</strong> {{ saida.atendimento }}<br>
+                    <strong>Estoque de Origem:</strong> {{ saida.local.nome }}
+                </p>
+                <div class="alert alert-warning text-start shadow-sm">
+                    <strong><i class="bi bi-info-circle"></i> O que vai acontecer:</strong><br>
+                    Os produtos consumidos neste atendimento serão <strong>devolvidos</strong> ao estoque ({{ saida.local.nome }}). Esta ação ficará registrada na auditoria do sistema e não pode ser desfeita.
+                </div>
+                
+                <form method="post" class="mt-4">
+                    {% csrf_token %}
+                    <a href="{% url 'saida_list' %}" class="btn btn-secondary px-4 me-2">Cancelar</a>
+                    <button type="submit" class="btn btn-danger px-4 fw-bold">Sim, Excluir e Devolver Saldo</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -253,7 +253,7 @@ def produto_export(request):
             local_id__in=locais_selecionados # <--- A mágica acontece aqui
         ).aggregate(t=Sum('quantidade'))['t'] or 0
         
-        p.saldo_empresa = total_estoque
+        p.saldo_empresa = total_estoque 
         
     if tipo == 'sintetica' and request.GET.get('zerados', '0') == '0': 
         produtos = [p for p in produtos if p.saldo_empresa > 0]
@@ -551,60 +551,71 @@ def entrada_create(request):
 
 @login_required
 def entrada_edit(request, id):
-    empresa = get_object_or_404(Empresa, id=request.session['empresa_id'])
+    empresa_id = request.session.get('empresa_id')
+    empresa = get_object_or_404(Empresa, id=empresa_id)
     entrada = get_object_or_404(Entrada, id=id, empresa=empresa)
-    if not check_movimento_bloqueado(entrada): 
-        messages.error(request, 'Bloqueado')
-        return redirect('entrada_list')
-    
-    # Guarda o estado original dos produtos ANTES do POST
-    produtos_originais = list(entrada.itens.all()) 
-    
+    old_local = entrada.local # Guarda de onde era antes da edição
+
     if request.method == 'POST':
         form = EntradaForm(request.POST, instance=entrada)
         formset = ItemEntradaFormSet(request.POST, instance=entrada)
         if form.is_valid() and formset.is_valid():
             with transaction.atomic():
-                detalhes = gerar_detalhes_edicao(form, formset)
+                old_items = list(entrada.itens.all())
+                entrada = form.save(commit=False)
+                entrada.save()
                 
-                # CORREÇÃO: Intercepta e protege antes de salvar a edição
-                entrada_obj = form.save(commit=False)
-                if not entrada_obj.nota_fiscal:
-                    entrada_obj.nota_fiscal = "S/N"
-                entrada_obj.save()
+                formset.instance = entrada
+                itens = formset.save()
                 
-                itens_salvos = formset.save()
-                HistoricoEntrada.objects.create(entrada=entrada, usuario=request.user, detalhes=detalhes)
+                HistoricoEntrada.objects.create(entrada=entrada, usuario=request.user, detalhes="Entrada editada.")
                 
-                # Recalcula o estoque de quem ficou, de quem estava antes, e de quem foi deletado
-                afetados = set(i.produto for i in produtos_originais).union(set(i.produto for i in itens_salvos))
-                for obj in getattr(formset, 'deleted_objects', []): afetados.add(obj.produto)
-                for p in afetados: p.atualizar_estoque(empresa)
-                
+                # Recalcula o saldo no local antigo (caso tenha mudado) e no novo
+                afetados = set(i.produto for i in itens) | set(i.produto for i in old_items)
+                for p in afetados:
+                    if old_local: p.atualizar_estoque(local=old_local)
+                    p.atualizar_estoque(local=entrada.local)
+                    
+            messages.success(request, 'Entrada atualizada com sucesso!')
             return redirect('entrada_list')
     else:
         form = EntradaForm(instance=entrada)
         formset = ItemEntradaFormSet(instance=entrada)
+        form.fields['local'].queryset = LocalEstoque.objects.filter(empresa=empresa, ativo=True)
         form.fields['fornecedor'].queryset = Fornecedor.objects.filter(ativo=True)
         for f in formset.forms: f.fields['produto'].queryset = Produto.objects.filter(ativo=True)
         
     regras = {p.id: {'lote': p.controla_lote, 'validade': p.controla_validade} for p in Produto.objects.filter(ativo=True)}
-    return render(request, 'estoque/entrada_form.html', {'form': form, 'formset': formset, 'produtos_regras_json': json.dumps(regras)})
+    return render(request, 'estoque/entrada_form.html', {'form': form, 'formset': formset, 'produtos_regras_json': json.dumps(regras), 'entrada': entrada})
 
 @login_required
 def entrada_delete(request, id):
-    empresa = get_object_or_404(Empresa, id=request.session['empresa_id'])
-    entrada = get_object_or_404(Entrada, id=id, empresa=empresa)
-    if not check_movimento_bloqueado(entrada): return redirect('entrada_list')
+    empresa_id = request.session.get('empresa_id')
+    entrada = get_object_or_404(Entrada, id=id, empresa_id=empresa_id)
+    
     if request.method == 'POST':
         with transaction.atomic():
-            audit = AuditoriaExclusao.objects.create(empresa=empresa, tipo_movimento='ENTRADA', identificador=f"NF: {entrada.nota_fiscal}", usuario=request.user)
-            afetados = set(i.produto for i in entrada.itens.all())
-            for i in entrada.itens.all(): ItemAuditoriaExclusao.objects.create(auditoria=audit, produto_nome=i.produto.nome, quantidade=i.quantidade, lote=i.lote)
+            auditoria = AuditoriaExclusao.objects.create(
+                empresa_id=empresa_id, tipo_movimento='ENTRADA',
+                identificador=f"NF: {entrada.nota_fiscal} - {entrada.fornecedor.nome}",
+                usuario=request.user
+            )
+            afetados = []
+            local_afetado = entrada.local
+            for item in entrada.itens.all():
+                ItemAuditoriaExclusao.objects.create(
+                    auditoria=auditoria, produto_nome=item.produto.nome,
+                    quantidade=item.quantidade, lote=item.lote, validade=item.validade
+                )
+                afetados.append(item.produto)
+                
             entrada.delete()
-            for p in afetados: p.atualizar_estoque(empresa)
+            for p in set(afetados):
+                if local_afetado: p.atualizar_estoque(local=local_afetado)
+                
+        messages.success(request, 'Entrada excluída com sucesso!')
         return redirect('entrada_list')
-    return render(request, 'estoque/confirmar_exclusao.html', {'item': entrada.nota_fiscal, 'url_cancelar': 'entrada_list'})
+    return render(request, 'estoque/entrada_confirm_delete.html', {'entrada': entrada})
 
 @login_required
 def saida_list(request): 
@@ -653,46 +664,74 @@ def saida_create(request):
 
 @login_required
 def saida_edit(request, id):
-    empresa = get_object_or_404(Empresa, id=request.session['empresa_id'])
+    empresa_id = request.session.get('empresa_id')
+    empresa = get_object_or_404(Empresa, id=empresa_id)
     saida = get_object_or_404(Saida, id=id, empresa=empresa)
-    produtos_originais = list(saida.itens.all())
-    
+    old_local = saida.local
+
     if request.method == 'POST':
         form = SaidaForm(request.POST, instance=saida)
         formset = ItemSaidaFormSet(request.POST, instance=saida)
-        formset.empresa_id = empresa.id
+        
+        # Injeta o local selecionado para o validador
+        if request.POST.get('local'):
+            formset.local_id = request.POST.get('local')
+            
         if form.is_valid() and formset.is_valid():
             with transaction.atomic():
-                detalhes = gerar_detalhes_edicao(form, formset)
-                form.save()
-                itens_salvos = formset.save()
-                HistoricoSaida.objects.create(saida=saida, usuario=request.user, detalhes=detalhes)
+                old_items = list(saida.itens.all())
+                saida = form.save(commit=False)
+                saida.save()
                 
-                afetados = set(i.produto for i in produtos_originais).union(set(i.produto for i in itens_salvos))
-                for obj in getattr(formset, 'deleted_objects', []): afetados.add(obj.produto)
-                for p in afetados: p.atualizar_estoque(empresa)
+                formset.instance = saida
+                itens = formset.save()
                 
+                HistoricoSaida.objects.create(saida=saida, usuario=request.user, detalhes="Saída editada.")
+                
+                afetados = set(i.produto for i in itens) | set(i.produto for i in old_items)
+                for p in afetados:
+                    if old_local: p.atualizar_estoque(local=old_local)
+                    p.atualizar_estoque(local=saida.local)
+                    
+            messages.success(request, 'Saída atualizada com sucesso!')
             return redirect('saida_list')
     else:
         form = SaidaForm(instance=saida)
         formset = ItemSaidaFormSet(instance=saida)
+        form.fields['local'].queryset = LocalEstoque.objects.filter(empresa=empresa, tipo='DISTRIBUICAO', ativo=True)
         for f in formset.forms: f.fields['produto'].queryset = Produto.objects.filter(ativo=True)
+        
     regras = {p.id: {'lote': p.controla_lote} for p in Produto.objects.filter(ativo=True)}
-    return render(request, 'estoque/saida_form.html', {'form': form, 'formset': formset, 'produtos_regras_json': json.dumps(regras)})
+    return render(request, 'estoque/saida_form.html', {'form': form, 'formset': formset, 'produtos_regras_json': json.dumps(regras), 'saida': saida})
 
 @login_required
 def saida_delete(request, id):
-    empresa = get_object_or_404(Empresa, id=request.session['empresa_id'])
-    saida = get_object_or_404(Saida, id=id, empresa=empresa)
+    empresa_id = request.session.get('empresa_id')
+    saida = get_object_or_404(Saida, id=id, empresa_id=empresa_id)
+    
     if request.method == 'POST':
         with transaction.atomic():
-            audit = AuditoriaExclusao.objects.create(empresa=empresa, tipo_movimento='SAIDA', identificador=f"Paciente: {saida.paciente}", usuario=request.user)
-            afetados = set(i.produto for i in saida.itens.all())
-            for i in saida.itens.all(): ItemAuditoriaExclusao.objects.create(auditoria=audit, produto_nome=i.produto.nome, quantidade=i.quantidade, lote=i.lote)
+            auditoria = AuditoriaExclusao.objects.create(
+                empresa_id=empresa_id, tipo_movimento='SAIDA',
+                identificador=f"Paciente: {saida.paciente} - Atend: {saida.atendimento}",
+                usuario=request.user
+            )
+            afetados = []
+            local_afetado = saida.local
+            for item in saida.itens.all():
+                ItemAuditoriaExclusao.objects.create(
+                    auditoria=auditoria, produto_nome=item.produto.nome,
+                    quantidade=item.quantidade, lote=item.lote
+                )
+                afetados.append(item.produto)
+                
             saida.delete()
-            for p in afetados: p.atualizar_estoque(empresa)
+            for p in set(afetados):
+                if local_afetado: p.atualizar_estoque(local=local_afetado)
+                
+        messages.success(request, 'Saída excluída com sucesso!')
         return redirect('saida_list')
-    return render(request, 'estoque/confirmar_exclusao.html', {'item': saida.paciente, 'url_cancelar': 'saida_list'})
+    return render(request, 'estoque/saida_confirm_delete.html', {'saida': saida})
 
 @login_required
 def baixa_list(request): 
@@ -739,47 +778,73 @@ def baixa_create(request):
 
 @login_required
 def baixa_edit(request, id):
-    empresa = get_object_or_404(Empresa, id=request.session['empresa_id'])
+    empresa_id = request.session.get('empresa_id')
+    empresa = get_object_or_404(Empresa, id=empresa_id)
     baixa = get_object_or_404(Baixa, id=id, empresa=empresa)
-    produtos_originais = list(baixa.itens.all())
-    
+    old_local = baixa.local
+
     if request.method == 'POST':
         form = BaixaForm(request.POST, instance=baixa)
         formset = ItemBaixaFormSet(request.POST, instance=baixa)
-        formset.empresa_id = empresa.id
+        
+        if request.POST.get('local'):
+            formset.local_id = request.POST.get('local')
+            
         if form.is_valid() and formset.is_valid():
             with transaction.atomic():
-                detalhes = gerar_detalhes_edicao(form, formset)
-                form.save()
-                itens_salvos = formset.save()
-                HistoricoBaixa.objects.create(baixa=baixa, usuario=request.user, detalhes=detalhes)
+                old_items = list(baixa.itens.all())
+                baixa = form.save(commit=False)
+                baixa.save()
                 
-                afetados = set(i.produto for i in produtos_originais).union(set(i.produto for i in itens_salvos))
-                for obj in getattr(formset, 'deleted_objects', []): afetados.add(obj.produto)
-                for p in afetados: p.atualizar_estoque(empresa)
+                formset.instance = baixa
+                itens = formset.save()
                 
+                HistoricoBaixa.objects.create(baixa=baixa, usuario=request.user, detalhes="Baixa editada.")
+                
+                afetados = set(i.produto for i in itens) | set(i.produto for i in old_items)
+                for p in afetados:
+                    if old_local: p.atualizar_estoque(local=old_local)
+                    p.atualizar_estoque(local=baixa.local)
+                    
+            messages.success(request, 'Baixa atualizada com sucesso!')
             return redirect('baixa_list')
     else:
         form = BaixaForm(instance=baixa)
-        form.fields['motivo'].queryset = MotivoBaixa.objects.filter(ativo=True)
         formset = ItemBaixaFormSet(instance=baixa)
+        form.fields['local'].queryset = LocalEstoque.objects.filter(empresa=empresa, ativo=True)
         for f in formset.forms: f.fields['produto'].queryset = Produto.objects.filter(ativo=True)
+        
     regras = {p.id: {'lote': p.controla_lote} for p in Produto.objects.filter(ativo=True)}
-    return render(request, 'estoque/baixa_form.html', {'form': form, 'formset': formset, 'produtos_regras_json': json.dumps(regras)})
+    return render(request, 'estoque/baixa_form.html', {'form': form, 'formset': formset, 'produtos_regras_json': json.dumps(regras), 'baixa': baixa})
 
 @login_required
 def baixa_delete(request, id):
-    empresa = get_object_or_404(Empresa, id=request.session['empresa_id'])
-    baixa = get_object_or_404(Baixa, id=id, empresa=empresa)
+    empresa_id = request.session.get('empresa_id')
+    baixa = get_object_or_404(Baixa, id=id, empresa_id=empresa_id)
+    
     if request.method == 'POST':
         with transaction.atomic():
-            audit = AuditoriaExclusao.objects.create(empresa=empresa, tipo_movimento='BAIXA', identificador=baixa.motivo.nome, usuario=request.user)
-            afetados = set(i.produto for i in baixa.itens.all())
-            for i in baixa.itens.all(): ItemAuditoriaExclusao.objects.create(auditoria=audit, produto_nome=i.produto.nome, quantidade=i.quantidade, lote=i.lote)
+            auditoria = AuditoriaExclusao.objects.create(
+                empresa_id=empresa_id, tipo_movimento='BAIXA',
+                identificador=f"Motivo: {baixa.motivo.nome}",
+                usuario=request.user
+            )
+            afetados = []
+            local_afetado = baixa.local
+            for item in baixa.itens.all():
+                ItemAuditoriaExclusao.objects.create(
+                    auditoria=auditoria, produto_nome=item.produto.nome,
+                    quantidade=item.quantidade, lote=item.lote
+                )
+                afetados.append(item.produto)
+                
             baixa.delete()
-            for p in afetados: p.atualizar_estoque(empresa)
+            for p in set(afetados):
+                if local_afetado: p.atualizar_estoque(local=local_afetado)
+                
+        messages.success(request, 'Baixa excluída com sucesso!')
         return redirect('baixa_list')
-    return render(request, 'estoque/confirmar_exclusao.html', {'item': baixa.motivo.nome, 'url_cancelar': 'baixa_list'})
+    return render(request, 'estoque/baixa_confirm_delete.html', {'baixa': baixa})
 
 @login_required
 def api_lotes_produto(request, id):
@@ -1058,28 +1123,33 @@ def manutencao_create(request):
 
 @login_required
 def manutencao_edit(request, id):
-    empresa = get_object_or_404(Empresa, id=request.session['empresa_id'])
-    manutencao = get_object_or_404(Manutencao, id=id, empresa=empresa, status='PENDENTE')
+    empresa_id = request.session.get('empresa_id')
+    empresa = get_object_or_404(Empresa, id=empresa_id)
+    manutencao = get_object_or_404(Manutencao, id=id, empresa_id=empresa_id)
     
+    old_local = manutencao.local
+    old_produto = manutencao.produto
+
     if request.method == 'POST':
         form = ManutencaoEnvioForm(request.POST, request.FILES, instance=manutencao, initial={'empresa': empresa})
         if form.is_valid():
             with transaction.atomic():
-                form.save()
-                manutencao.produto.atualizar_estoque(empresa)
-                messages.success(request, 'Manutenção editada com sucesso!')
+                manutencao = form.save()
+                
+                # Recalcula as peças antigas e as novas para corrigir o estoque
+                if old_produto and old_local:
+                    old_produto.atualizar_estoque(local=old_local)
+                manutencao.produto.atualizar_estoque(local=manutencao.local)
+                
+                messages.success(request, 'Manutenção atualizada com sucesso!')
                 return redirect('manutencao_list')
     else:
         form = ManutencaoEnvioForm(instance=manutencao, initial={'empresa': empresa})
-        # Ao editar, é importante deixar o produto atual disponível mesmo que o estoque dele fora da manutenção seja 0
+        form.fields['local'].queryset = LocalEstoque.objects.filter(empresa=empresa, ativo=True)
         form.fields['produto'].queryset = Produto.objects.filter(ativo=True)
-        
-        # Injeta o lote atual no formulário se existir
-        if manutencao.lote:
-            form.fields['lote'].choices = [(manutencao.lote, f"{manutencao.lote} (Atual)")]
 
     regras = {p.id: {'lote': p.controla_lote} for p in Produto.objects.filter(ativo=True)}
-    return render(request, 'estoque/manutencao_form.html', {'form': form, 'manutencao': manutencao, 'produtos_regras_json': json.dumps(regras)})
+    return render(request, 'estoque/manutencao_form.html', {'form': form, 'produtos_regras_json': json.dumps(regras), 'manutencao': manutencao})
 
 @login_required
 def manutencao_delete(request, id):
