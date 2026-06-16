@@ -1,0 +1,39 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <h3 class="mb-4">
+            {% if form.instance.pk %}Editar Local de Estoque{% else %}Novo Local de Estoque{% endif %}
+        </h3>
+        
+        <form method="post" class="card shadow-sm border-0 p-4 bg-light">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="form-label fw-bold">Nome do Setor/Local</label>
+                {{ form.nome }}
+                <div class="text-danger small">{{ form.nome.errors }}</div>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label fw-bold">Tipo de Fluxo</label>
+                {{ form.tipo }}
+                <div class="text-danger small">{{ form.tipo.errors }}</div>
+                <small class="text-muted d-block mt-1">
+                    <strong>Armazenamento:</strong> Depósitos e Almoxarifados (Podem receber NFs, mas não podem realizar saída direto para paciente).<br>
+                    <strong>Distribuição:</strong> Farmácias e Centros Cirúrgicos (Podem dar saída em paciente, mas só recebem mercadorias por transferência).
+                </small>
+            </div>
+            
+            <div class="mb-4 form-check form-switch">
+                {{ form.ativo }}
+                <label class="form-check-label fw-bold" for="{{ form.ativo.id_for_label }}">Ativo (Visível no sistema)</label>
+            </div>
+            
+            <div class="d-flex justify-content-end">
+                <a href="{% url 'local_estoque_list' %}" class="btn btn-secondary me-2">Cancelar</a>
+                <button type="submit" class="btn btn-success fw-bold">Salvar Local</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -91,6 +91,17 @@ urlpatterns = [
     path('manutencao/<int:id>/concluir/', views.manutencao_concluir, name='manutencao_concluir'),
 
     path('api/lotes/<int:id>/', views.api_lotes_produto, name='api_lotes_produto'),
+
+    # Transferências entre Estoques
+    path('transferencias/', views.transferencia_list, name='transferencia_list'),
+    path('transferencias/nova/', views.transferencia_create, name='transferencia_create'),
+    path('transferencias/<int:id>/editar/', views.transferencia_edit, name='transferencia_edit'),
+    path('transferencias/<int:id>/excluir/', views.transferencia_delete, name='transferencia_delete'),
+
+    # Locais de Estoque
+    path('locais/', views.local_estoque_list, name='local_estoque_list'),
+    path('locais/novo/', views.local_estoque_form_view, name='local_estoque_create'),
+    path('locais/<int:id>/editar/', views.local_estoque_form_view, name='local_estoque_edit'),
 ]
 
 # Configuração para o Django servir as fotos no ambiente de desenvolvimento local

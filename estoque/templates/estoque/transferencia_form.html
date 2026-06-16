@@ -3,44 +3,37 @@
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
 
-<h3 class="mb-4">Registrar Consumo de Paciente</h3>
-<form method="post" id="saida-form" novalidate>
+<h3 class="mb-4">Realizar Transferência de Estoque</h3>
+<form method="post" id="transferencia-form" novalidate>
     {% csrf_token %}
-    <div class="card mb-4 border-warning">
-        <div class="card-header bg-warning text-dark fw-bold">Dados do Atendimento</div>
+    <div class="card mb-4 border-primary">
+        <div class="card-header bg-primary text-white fw-bold">Direcionamento Logístico</div>
         <div class="card-body row">
-            <div class="col-md-3">
-                <label class="fw-bold">Estoque de Origem</label>
-                {{ form.local }}
-                <div class="text-danger small">{{ form.local.errors }}</div>
+            {% if form.non_field_errors %}
+            <div class="col-12 mb-3">
+                <div class="alert alert-danger fw-bold">{{ form.non_field_errors.0 }}</div>
             </div>
-            <div class="col-md-4">
-                <label>Paciente</label>
-                {{ form.paciente }}
-                <div class="text-danger small">{{ form.paciente.errors }}</div>
+            {% endif %}
+            <div class="col-md-6">
+                <label class="form-label fw-bold text-danger">Retirar de (Origem)</label>
+                {{ form.local_origem }}
             </div>
-            <div class="col-md-2">
-                <label>Atendimento</label>
-                {{ form.atendimento }}
-                <div class="text-danger small">{{ form.atendimento.errors }}</div>
-            </div>
-            <div class="col-md-3">
-                <label>Aviso Cirurgia</label>
-                {{ form.aviso_cirurgia }}
-                <div class="text-danger small">{{ form.aviso_cirurgia.errors }}</div>
+            <div class="col-md-6">
+                <label class="form-label fw-bold text-success">Enviar para (Destino)</label>
+                {{ form.local_destino }}
             </div>
         </div>
     </div>
     
     <div class="card mb-4 border-dark">
-        <div class="card-header bg-dark text-white d-flex justify-content-between">
-            <span>Produtos Consumidos</span>
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <span>Produtos a Transferir</span>
             <button type="button" class="btn btn-sm btn-light" id="add-item-btn">+ Adicionar Linha</button>
         </div>
         <div class="card-body">
             {% if formset.non_form_errors %}
             <div class="alert alert-danger shadow-sm">
-                <strong>Atenção ao Estoque:</strong>
+                <strong>Erro de Validação:</strong>
                 {% for error in formset.non_form_errors %}
                     <div class="small fw-bold">{{ error }}</div>
                 {% endfor %}
@@ -55,28 +48,24 @@
                     <div class="col-md-6">
                         <label class="small">Produto</label>
                         {{ form_item.produto }}
-                        <div class="text-danger small fw-bold">{{ form_item.produto.errors }}</div>
                     </div>
                     <div class="col-md-2">
                         <label class="small">Qtd</label>
                         {{ form_item.quantidade }}
-                        <div class="text-danger small fw-bold">{{ form_item.quantidade.errors }}</div>
                     </div>
                     <div class="col-md-4 campo-lote" style="display:none;">
-                        <label class="small text-danger fw-bold">Selecione o Lote</label>
+                        <label class="small text-danger fw-bold">Selecione o Lote na Origem</label>
                         {{ form_item.lote }}
-                        <div class="text-danger small fw-bold">{{ form_item.lote.errors }}</div>
                     </div>
                 </div>
                 {% endfor %}
             </div>
-            <small class="text-muted d-block mt-3">Nota: Selecione primeiro o Estoque de Origem acima para carregar os lotes válidos.</small>
         </div>
     </div>
     
     <div class="text-end mb-5">
-        <a href="{% url 'saida_list' %}" class="btn btn-secondary me-2">Cancelar</a>
-        <button type="submit" class="btn btn-warning btn-lg fw-bold">Concluir Saída</button>
+        <a href="{% url 'transferencia_list' %}" class="btn btn-secondary me-2">Cancelar</a>
+        <button type="submit" class="btn btn-primary btn-lg fw-bold">Efetivar Transferência</button>
     </div>
 </form>
 
@@ -85,7 +74,7 @@
         {{ formset.empty_form.id }}
         <div class="col-md-6"><label class="small">Produto</label>{{ formset.empty_form.produto }}</div>
         <div class="col-md-2"><label class="small">Qtd</label>{{ formset.empty_form.quantidade }}</div>
-        <div class="col-md-4 campo-lote" style="display:none;"><label class="small text-danger fw-bold">Selecione o Lote</label>{{ formset.empty_form.lote }}</div>
+        <div class="col-md-4 campo-lote" style="display:none;"><label class="small text-danger fw-bold">Selecione o Lote na Origem</label>{{ formset.empty_form.lote }}</div>
     </div>
 </div>
 
@@ -96,13 +85,13 @@
         const totalForms = document.getElementById('id_itens-TOTAL_FORMS');
         const emptyForm = document.getElementById('empty-form').innerHTML;
         const regras = JSON.parse('{{ produtos_regras_json|safe }}');
-        const selectLocal = document.querySelector('select[name="local"]');
+        const selectOrigem = document.querySelector('select[name="local_origem"]');
 
         async function atualizarLote(selectProduto) {
             const row = selectProduto.closest('.item-form');
             const campoLoteDiv = row.querySelector('.campo-lote');
             const inputQuantidade = row.querySelector('input[name$="-quantidade"]');
-            const localId = selectLocal.value;
+            const localId = selectOrigem.value;
             
             let inputLote = row.querySelector('[name$="-lote"]');
             const loteName = inputLote.getAttribute('name');
@@ -111,7 +100,7 @@
             const loteAtual = inputLote.value;
 
             if (!localId && produtoId) {
-                alert("Por favor, selecione primeiro o Estoque de Origem no topo.");
+                alert("Selecione primeiro o Estoque de Origem.");
                 if(selectProduto.tomselect) selectProduto.tomselect.clear();
                 return;
             }
@@ -126,13 +115,12 @@
                 inputLote = selectLote; 
 
                 try {
-                    // ATUALIZADO: Passa o local selecionado para a API
                     const response = await fetch(`/api/lotes/${produtoId}/?local=${localId}&acao=saida`);
                     const data = await response.json();
                     
                     inputLote.innerHTML = '<option value="">-- Escolha um lote --</option>';
                     if (data.lotes.length === 0 && !loteAtual) {
-                        inputLote.innerHTML = '<option value="">SEM ESTOQUE NESTE LOCAL</option>';
+                        inputLote.innerHTML = '<option value="">SEM SALDO NESTA ORIGEM</option>';
                         inputQuantidade.max = 0;
                     } else {
                         data.lotes.forEach(l => {
@@ -142,13 +130,6 @@
                             inputLote.appendChild(opt);
                         });
                     }
-                    inputLote.addEventListener('change', function() {
-                        const selectedOpt = this.options[this.selectedIndex];
-                        if (selectedOpt && selectedOpt.dataset.saldo) {
-                            inputQuantidade.max = selectedOpt.dataset.saldo;
-                            inputQuantidade.placeholder = `Máx: ${selectedOpt.dataset.saldo}`;
-                        }
-                    });
                 } catch (error) { inputLote.innerHTML = '<option value="">Erro</option>'; }
             } else {
                 campoLoteDiv.style.display = 'none';
@@ -161,7 +142,7 @@
 
         function aplicarBusca(selectElement) {
             new TomSelect(selectElement, {
-                create: false, placeholder: "Pesquise cód. ou nome...",
+                create: false, placeholder: "Pesquise produto...",
                 onChange: function() { atualizarLote(selectElement); }
             });
         }
@@ -170,19 +151,15 @@
             if(!s.id.includes('__prefix__')){ aplicarBusca(s); atualizarLote(s); }
         });
 
-        // Limpa as linhas se o usuário mudar o estoque de origem para não misturar saldos
-        selectLocal.addEventListener('change', function() {
-            document.querySelectorAll('.item-form select[name$="-produto"]').forEach(s => {
-                if(s.tomselect) s.tomselect.clear();
-            });
+        selectOrigem.addEventListener('change', function() {
+            document.querySelectorAll('.item-form select[name$="-produto"]').forEach(s => { if(s.tomselect) s.tomselect.clear(); });
         });
 
         btnAdd.addEventListener('click', function() {
             let count = parseInt(totalForms.value);
             container.insertAdjacentHTML('beforeend', emptyForm.replace(/__prefix__/g, count));
             totalForms.value = count + 1;
-            const newSelects = container.querySelectorAll('.item-form select[name$="-produto"]');
-            aplicarBusca(newSelects[newSelects.length - 1]);
+            aplicarBusca(container.querySelectorAll('.item-form select[name$="-produto"]')[count]);
         });
     });
 </script>

@@ -17,13 +17,17 @@ from .models import (
     Produto, Especie, Fornecedor, Entrada, ItemEntrada, MotivoBaixa, 
     Saida, ItemSaida, Baixa, ItemBaixa, Usuario, HistoricoEntrada, 
     HistoricoSaida, HistoricoBaixa, AuditoriaExclusao, ItemAuditoriaExclusao, 
-    Empresa, Estoque, Defeito, Especialidade, Manutencao, Marca
+    Empresa, Estoque, Defeito, Especialidade, Manutencao, Marca,
+    LocalEstoque, Transferencia, ItemTransferencia, HistoricoTransferencia
 )
+
 from .forms import (
     ProdutoForm, EspecieForm, FornecedorForm, EntradaForm, ItemEntradaFormSet, 
     MotivoBaixaForm, SaidaForm, ItemSaidaFormSet, BaixaForm, ItemBaixaFormSet, 
     UsuarioForm, MudarSenhaForm, EmpresaForm, DefeitoForm, EspecialidadeForm, 
-    ManutencaoEnvioForm, ManutencaoConclusaoForm, MarcaForm
+    ManutencaoEnvioForm, ManutencaoConclusaoForm, MarcaForm,
+    TransferenciaForm, ItemTransferenciaFormSet,
+    LocalEstoqueForm # <--- SÓ ADICIONAR ESTE AQUI!
 )
 
 def ti_required(view_func):
@@ -215,12 +219,16 @@ def produto_list(request):
     if sort in ['id', '-id', 'nome', '-nome']: produtos = produtos.order_by(sort)
 
     for p in produtos:
-        estoque = Estoque.objects.filter(produto=p, empresa_id=empresa_id).first()
-        p.saldo_empresa = estoque.quantidade if estoque else 0
+        # SOMA a quantidade de todos os Locais de Estoque daquela empresa
+        total_estoque = Estoque.objects.filter(produto=p, empresa_id=empresa_id).aggregate(t=Sum('quantidade'))['t'] or 0
+        p.saldo_empresa = total_estoque
+
+        locais_ativos = LocalEstoque.objects.filter(empresa_id=empresa_id, ativo=True)
 
     context = {
         'produtos': produtos, 
         'especies': Especie.objects.all(), 
+        'locais': locais_ativos,
         'q': q, 
         'status': status, 
         'especie_id': especie_id, 
@@ -235,10 +243,17 @@ def produto_export(request):
     tipo = request.GET.get('tipo', 'sintetica')
     formato = request.GET.get('formato', 'excel')
     produtos = Produto.objects.all().order_by('nome')
+    locais_selecionados = request.GET.getlist('locais')
     
     for p in produtos:
-        estoque = Estoque.objects.filter(produto=p, empresa_id=empresa_id).first()
-        p.saldo_empresa = estoque.quantidade if estoque else 0
+        # AGORA ELE SOMA APENAS OS LOCAIS QUE VOCÊ MARCOU NA TELA
+        total_estoque = Estoque.objects.filter(
+            produto=p, 
+            empresa_id=empresa_id,
+            local_id__in=locais_selecionados # <--- A mágica acontece aqui
+        ).aggregate(t=Sum('quantidade'))['t'] or 0
+        
+        p.saldo_empresa = total_estoque
         
     if tipo == 'sintetica' and request.GET.get('zerados', '0') == '0': 
         produtos = [p for p in produtos if p.saldo_empresa > 0]
@@ -281,21 +296,86 @@ def produto_export(request):
 def produto_detail(request, id):
     empresa_id = request.session.get('empresa_id')
     produto = get_object_or_404(Produto, id=id)
-    entradas = ItemEntrada.objects.filter(produto=produto, entrada__empresa_id=empresa_id).values('lote', 'validade').annotate(total_entrada=Sum('quantidade'))
-    estoque_por_lote = []
-    for e in entradas:
-        lote = e['lote']
-        validade = e['validade'] # Captura a validade original da entrada
-        saidas = ItemSaida.objects.filter(produto=produto, lote=lote, saida__empresa_id=empresa_id).aggregate(t=Sum('quantidade'))['t'] or 0
-        baixas = ItemBaixa.objects.filter(produto=produto, lote=lote, baixa__empresa_id=empresa_id).aggregate(t=Sum('quantidade'))['t'] or 0
-        saldo = e['total_entrada'] - saidas - baixas
-        if saldo > 0: estoque_por_lote.append({ 'lote': lote if lote else 'Sem Lote', 'validade': validade, 'saldo': saldo })
     
-    # Busca o saldo geral do produto na empresa logada
-    estoque = Estoque.objects.filter(produto=produto, empresa_id=empresa_id).first()
-    saldo_total = estoque.quantidade if estoque else 0
+    # 1. Saldo Geral do Produto
+    saldos_locais = Estoque.objects.filter(produto=produto, empresa_id=empresa_id, quantidade__gt=0)
+    saldo_total = saldos_locais.aggregate(t=Sum('quantidade'))['t'] or 0
+
+    # 2. Rastreabilidade de Lotes
+    lotes_info = []
+    
+    if produto.controla_lote:
+        entradas = ItemEntrada.objects.filter(produto=produto, entrada__empresa_id=empresa_id)
+        saidas = ItemSaida.objects.filter(produto=produto, saida__empresa_id=empresa_id)
+        baixas = ItemBaixa.objects.filter(produto=produto, baixa__empresa_id=empresa_id)
+        transf_in = ItemTransferencia.objects.filter(produto=produto, transferencia__empresa_id=empresa_id)
+        transf_out = ItemTransferencia.objects.filter(produto=produto, transferencia__empresa_id=empresa_id)
+        manuts = Manutencao.objects.filter(produto=produto, empresa_id=empresa_id, status__in=['PENDENTE', 'DESCARTADO'])
         
-    return render(request, 'estoque/produto_detail.html', {'produto': produto, 'estoque_por_lote': estoque_por_lote, 'saldo_total': saldo_total})
+        # Pega todos os lotes que já passaram por esse produto na empresa
+        lotes_unicos = set(entradas.values_list('lote', flat=True)) | set(transf_in.values_list('lote', flat=True))
+        
+        # Pega todos os locais (mesmo inativos) para não perder saldo
+        locais = LocalEstoque.objects.filter(empresa_id=empresa_id)
+
+        for lote in lotes_unicos:
+            if not lote: continue
+            
+            # PASSO A: Calcula o saldo global do LOTE primeiro (para garantir que nada suma)
+            e_g = entradas.filter(lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
+            s_g = saidas.filter(lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
+            b_g = baixas.filter(lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
+            ti_g = transf_in.filter(lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
+            to_g = transf_out.filter(lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
+            m_g = manuts.filter(lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
+            
+            saldo_lote_global = (e_g + ti_g) - (s_g + b_g + to_g + m_g)
+            
+            # Se o lote tem saldo no hospital, a gente destrincha onde ele está
+            if saldo_lote_global > 0:
+                detalhe_locais = []
+                saldo_mapeado = 0
+                
+                # PASSO B: Varre prateleira por prateleira
+                for local in locais:
+                    e = entradas.filter(lote=lote, entrada__local=local).aggregate(t=Sum('quantidade'))['t'] or 0
+                    s = saidas.filter(lote=lote, saida__local=local).aggregate(t=Sum('quantidade'))['t'] or 0
+                    b = baixas.filter(lote=lote, baixa__local=local).aggregate(t=Sum('quantidade'))['t'] or 0
+                    ti = transf_in.filter(lote=lote, transferencia__local_destino=local).aggregate(t=Sum('quantidade'))['t'] or 0
+                    to = transf_out.filter(lote=lote, transferencia__local_origem=local).aggregate(t=Sum('quantidade'))['t'] or 0
+                    m = manuts.filter(lote=lote, local=local).aggregate(t=Sum('quantidade'))['t'] or 0
+                    
+                    saldo_local = (e + ti) - (s + b + to + m)
+                    
+                    if saldo_local > 0:
+                        detalhe_locais.append({'nome': local.nome, 'saldo': saldo_local})
+                        saldo_mapeado += saldo_local
+                
+                # PASSO C: Proteção contra dados do passado sem local definido
+                saldo_perdido = saldo_lote_global - saldo_mapeado
+                if saldo_perdido > 0:
+                    detalhe_locais.append({
+                        'nome': 'Local Não Especificado (Legado)', 
+                        'saldo': saldo_perdido
+                    })
+                    
+                # Pega a validade real do lote
+                validade = entradas.filter(lote=lote).exclude(validade__isnull=True).values_list('validade', flat=True).first()
+                    
+                lotes_info.append({
+                    'lote': lote,
+                    'validade': validade,
+                    'saldo_total': saldo_lote_global,
+                    'locais': detalhe_locais
+                })
+
+    context = {
+        'produto': produto,
+        'saldo_total': saldo_total,
+        'saldos_locais': saldos_locais,
+        'lotes_info': lotes_info
+    }
+    return render(request, 'estoque/produto_detail.html', context)
 
 @ti_required
 def produto_form_view(request, id=None):
@@ -316,6 +396,35 @@ def produto_delete(request, id):
     return render(request, 'estoque/confirmar_exclusao.html', {'item': produto.nome, 'url_cancelar': 'produto_list'})
 
 # --- CADASTROS GLOBAIS ---
+
+# ==========================================
+# CADASTRO DE LOCAIS DE ESTOQUE
+# ==========================================
+@ti_required
+def local_estoque_list(request):
+    empresa_id = request.session.get('empresa_id')
+    locais = LocalEstoque.objects.filter(empresa_id=empresa_id).order_by('-tipo', 'nome')
+    return render(request, 'estoque/local_estoque_list.html', {'locais': locais})
+
+@ti_required
+def local_estoque_form_view(request, id=None):
+    empresa_id = request.session.get('empresa_id')
+    empresa = get_object_or_404(Empresa, id=empresa_id)
+    local = get_object_or_404(LocalEstoque, id=id, empresa=empresa) if id else None
+    
+    if request.method == 'POST':
+        form = LocalEstoqueForm(request.POST, instance=local)
+        if form.is_valid():
+            novo_local = form.save(commit=False)
+            novo_local.empresa = empresa
+            novo_local.save()
+            messages.success(request, 'Local de estoque salvo com sucesso!')
+            return redirect('local_estoque_list')
+    else:
+        form = LocalEstoqueForm(instance=local)
+        
+    return render(request, 'estoque/local_estoque_form.html', {'form': form, 'local': local})
+
 @login_required
 def especie_list(request): return render(request, 'estoque/especie_list.html', {'especies': Especie.objects.all()})
 @ti_required
@@ -413,11 +522,8 @@ def entrada_create(request):
         if form.is_valid() and formset.is_valid():
             with transaction.atomic():
                 entrada = form.save(commit=False)
-                
-                # CORREÇÃO: Previne o erro NOT NULL da Nota Fiscal
                 if not entrada.nota_fiscal:
                     entrada.nota_fiscal = "S/N"
-                    
                 entrada.empresa = empresa
                 entrada.usuario_registro = request.user
                 entrada.save()
@@ -425,15 +531,17 @@ def entrada_create(request):
                 formset.instance = entrada
                 itens = formset.save()
                 
-                # Atualiza estoque considerando os itens salvos e deletados
+                # Recalcula o estoque baseado no LOCAL selecionado
                 afetados = set(i.produto for i in itens)
-                for obj in getattr(formset, 'deleted_objects', []): afetados.add(obj.produto)
-                for p in afetados: p.atualizar_estoque(empresa)
+                for p in afetados: p.atualizar_estoque(local=entrada.local)
                 
+            messages.success(request, 'Entrada registrada com sucesso!')
             return redirect('entrada_list')
     else:
         form = EntradaForm()
         formset = ItemEntradaFormSet()
+        # Filtra os estoques apenas da empresa atual
+        form.fields['local'].queryset = LocalEstoque.objects.filter(empresa=empresa, ativo=True)
         form.fields['fornecedor'].queryset = Fornecedor.objects.filter(ativo=True)
         for f in formset.forms: f.fields['produto'].queryset = Produto.objects.filter(ativo=True)
         
@@ -508,29 +616,38 @@ def saida_detail(request, id):
 
 @login_required
 def saida_create(request):
-    empresa = get_object_or_404(Empresa, id=request.session['empresa_id'])
+    empresa_id = request.session.get('empresa_id')
+    empresa = get_object_or_404(Empresa, id=empresa_id)
     if request.method == 'POST':
         form = SaidaForm(request.POST)
         formset = ItemSaidaFormSet(request.POST)
-        formset.empresa_id = empresa.id # Injeta ID para a validação de estoque funcionar
+        
+        # Injeta o local selecionado para o validador do Formset inspecionar o saldo
+        if form.data.get('local'):
+            formset.local_id = form.data.get('local')
+            
         if form.is_valid() and formset.is_valid():
             with transaction.atomic():
                 saida = form.save(commit=False)
-                saida.empresa = empresa
+                saida.empresa_id = empresa_id
                 saida.usuario_registro = request.user
                 saida.save()
+                
                 formset.instance = saida
                 itens = formset.save()
                 
                 afetados = set(i.produto for i in itens)
-                for obj in getattr(formset, 'deleted_objects', []): afetados.add(obj.produto)
-                for p in afetados: p.atualizar_estoque(empresa)
-                
+                for p in afetados: p.atualizar_estoque(local=saida.local)
+                    
+            messages.success(request, 'Saída registrada com sucesso!')
             return redirect('saida_list')
     else:
         form = SaidaForm()
         formset = ItemSaidaFormSet()
-        for f in formset.forms: f.fields['produto'].queryset = Produto.objects.filter(estoques__empresa=empresa, estoques__quantidade__gt=0, ativo=True)
+        # Regra Estratégica: Saída de paciente só pode acontecer em estoques de DISTRIBUIÇÃO
+        form.fields['local'].queryset = LocalEstoque.objects.filter(empresa=empresa, tipo='DISTRIBUICAO', ativo=True)
+        for f in formset.forms: f.fields['produto'].queryset = Produto.objects.filter(ativo=True)
+        
     regras = {p.id: {'lote': p.controla_lote} for p in Produto.objects.filter(ativo=True)}
     return render(request, 'estoque/saida_form.html', {'form': form, 'formset': formset, 'produtos_regras_json': json.dumps(regras)})
 
@@ -587,30 +704,36 @@ def baixa_detail(request, id):
 
 @login_required
 def baixa_create(request):
-    empresa = get_object_or_404(Empresa, id=request.session['empresa_id'])
+    empresa_id = request.session.get('empresa_id')
+    empresa = get_object_or_404(Empresa, id=empresa_id)
     if request.method == 'POST':
         form = BaixaForm(request.POST)
         formset = ItemBaixaFormSet(request.POST)
-        formset.empresa_id = empresa.id
+        
+        if form.data.get('local'):
+            formset.local_id = form.data.get('local')
+            
         if form.is_valid() and formset.is_valid():
             with transaction.atomic():
                 baixa = form.save(commit=False)
-                baixa.empresa = empresa
+                baixa.empresa_id = empresa_id
                 baixa.usuario_registro = request.user
                 baixa.save()
+                
                 formset.instance = baixa
                 itens = formset.save()
                 
                 afetados = set(i.produto for i in itens)
-                for obj in getattr(formset, 'deleted_objects', []): afetados.add(obj.produto)
-                for p in afetados: p.atualizar_estoque(empresa)
-                
+                for p in afetados: p.atualizar_estoque(local=baixa.local)
+                    
+            messages.success(request, 'Baixa/Descarte registrado com sucesso!')
             return redirect('baixa_list')
     else:
         form = BaixaForm()
-        form.fields['motivo'].queryset = MotivoBaixa.objects.filter(ativo=True)
         formset = ItemBaixaFormSet()
-        for f in formset.forms: f.fields['produto'].queryset = Produto.objects.filter(estoques__empresa=empresa, estoques__quantidade__gt=0, ativo=True)
+        form.fields['local'].queryset = LocalEstoque.objects.filter(empresa=empresa, ativo=True)
+        for f in formset.forms: f.fields['produto'].queryset = Produto.objects.filter(ativo=True)
+        
     regras = {p.id: {'lote': p.controla_lote} for p in Produto.objects.filter(ativo=True)}
     return render(request, 'estoque/baixa_form.html', {'form': form, 'formset': formset, 'produtos_regras_json': json.dumps(regras)})
 
@@ -660,25 +783,50 @@ def baixa_delete(request, id):
 
 @login_required
 def api_lotes_produto(request, id):
-    empresa_id = request.session.get('empresa_id')
-    acao = request.GET.get('acao', 'saida')
-    produto = get_object_or_404(Produto, id=id)
-    entradas = ItemEntrada.objects.filter(produto=produto, entrada__empresa_id=empresa_id).values('lote', 'validade').annotate(total_in=Sum('quantidade'))
+    try:
+        local_id = request.GET.get('local')
+        
+        # Proteção extra: se o JavaScript enviar 'undefined' ou vazio, devolve lista vazia
+        if not local_id or local_id == 'undefined':
+            return JsonResponse({'lotes': []})
+        
+        # Converte o texto da URL em número inteiro com segurança
+        local_id = int(local_id)
+        produto = get_object_or_404(Produto, id=id)
+
+        entradas = ItemEntrada.objects.filter(produto=produto, entrada__local_id=local_id)
+        saidas = ItemSaida.objects.filter(produto=produto, saida__local_id=local_id)
+        baixas = ItemBaixa.objects.filter(produto=produto, baixa__local_id=local_id)
+        transf_in = ItemTransferencia.objects.filter(produto=produto, transferencia__local_destino_id=local_id)
+        transf_out = ItemTransferencia.objects.filter(produto=produto, transferencia__local_origem_id=local_id)
+        manutencoes = Manutencao.objects.filter(produto=produto, local_id=local_id, status__in=['PENDENTE', 'DESCARTADO'])
+
+        lotes_entrada = list(entradas.values_list('lote', flat=True).distinct())
+        lotes_transf = list(transf_in.values_list('lote', flat=True).distinct())
+        todos_lotes = set(lotes_entrada + lotes_transf)
+        
+        lotes_disponiveis = []
+        for lote in todos_lotes:
+            if not lote: continue
+            
+            e = entradas.filter(lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
+            ti = transf_in.filter(lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
+            
+            s = saidas.filter(lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
+            b = baixas.filter(lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
+            to = transf_out.filter(lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
+            m = manutencoes.filter(lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
+            
+            saldo = (e + ti) - (s + b + to + m)
+            if saldo > 0:
+                lotes_disponiveis.append({'lote': lote, 'saldo': saldo})
+                
+        return JsonResponse({'lotes': lotes_disponiveis})
     
-    lotes_disponiveis = []
-    hoje = date.today()
-    for e in entradas:
-        lote = e['lote']
-        validade = e['validade']
-        if not lote: continue
-        if acao == 'saida' and validade and validade < hoje: continue
-        
-        saidas = ItemSaida.objects.filter(produto=produto, lote=lote, saida__empresa_id=empresa_id).aggregate(t=Sum('quantidade'))['t'] or 0
-        baixas = ItemBaixa.objects.filter(produto=produto, lote=lote, baixa__empresa_id=empresa_id).aggregate(t=Sum('quantidade'))['t'] or 0
-        saldo = e['total_in'] - saidas - baixas
-        
-        if saldo > 0: lotes_disponiveis.append({'lote': lote, 'saldo': saldo})
-    return JsonResponse({'lotes': lotes_disponiveis})
+    except Exception as e:
+        # DEDO-DURO: Se algo falhar, vai piscar em vermelho no seu terminal!
+        print(f"========== ERRO NA API DE LOTES: {e} ==========")
+        return JsonResponse({'error': str(e)}, status=500)
 
 # --- RELATÓRIOS ---
 @login_required
@@ -888,7 +1036,6 @@ def manutencao_create(request):
     empresa = get_object_or_404(Empresa, id=request.session['empresa_id'])
     
     if request.method == 'POST':
-        # Passa a empresa no initial para o clean() do form funcionar
         form = ManutencaoEnvioForm(request.POST, request.FILES, initial={'empresa': empresa})
         if form.is_valid():
             with transaction.atomic():
@@ -898,14 +1045,13 @@ def manutencao_create(request):
                 manutencao.status = 'PENDENTE'
                 manutencao.save()
                 
-                manutencao.produto.atualizar_estoque(empresa)
+                manutencao.produto.atualizar_estoque(local=manutencao.local)
                 messages.success(request, 'Item enviado para manutenção com sucesso!')
                 return redirect('manutencao_list')
     else:
         form = ManutencaoEnvioForm(initial={'empresa': empresa})
-        form.fields['produto'].queryset = Produto.objects.filter(
-            estoques__empresa=empresa, estoques__quantidade__gt=0, ativo=True
-        )
+        form.fields['local'].queryset = LocalEstoque.objects.filter(empresa=empresa, ativo=True)
+        form.fields['produto'].queryset = Produto.objects.filter(ativo=True)
 
     regras = {p.id: {'lote': p.controla_lote} for p in Produto.objects.filter(ativo=True)}
     return render(request, 'estoque/manutencao_form.html', {'form': form, 'produtos_regras_json': json.dumps(regras)})
@@ -999,3 +1145,197 @@ def manutencao_detail(request, id):
     empresa = get_object_or_404(Empresa, id=request.session['empresa_id'])
     manutencao = get_object_or_404(Manutencao, id=id, empresa=empresa)
     return render(request, 'estoque/manutencao_detail.html', {'manutencao': manutencao})
+
+# ==========================================
+# NOVO: VISÕES DE TRANSFERÊNCIA DE ESTOQUE
+# ==========================================
+
+@login_required
+def transferencia_list(request):
+    empresa_id = request.session.get('empresa_id')
+    transferencias = Transferencia.objects.filter(empresa_id=empresa_id).order_by('-data_transferencia')
+    return render(request, 'estoque/transferencia_list.html', {'transferencias': transferencias})
+
+
+@login_required
+def transferencia_create(request):
+    empresa_id = request.session.get('empresa_id')
+    empresa = get_object_or_404(Empresa, id=empresa_id)
+    
+    if request.method == 'POST':
+        form = TransferenciaForm(request.POST)
+        formset = ItemTransferenciaFormSet(request.POST)
+        
+        # Alimenta o validador com o local de origem para checar se tem saldo lá dentro
+        if request.POST.get('local_origem'):
+            formset.local_id = request.POST.get('local_origem')
+            
+        if form.is_valid() and formset.is_valid():
+            with transaction.atomic():
+                transf = form.save(commit=False)
+                transf.empresa = empresa
+                transf.usuario_registro = request.user
+                transf.save()
+                
+                formset.instance = transf
+                itens = formset.save()
+                
+                # Atualiza as duas pontas: tira da Origem e coloca no Destino
+                afetados = set(i.produto for i in itens)
+                for p in afetados:
+                    p.atualizar_estoque(local=transf.local_origem)
+                    p.atualizar_estoque(local=transf.local_destino)
+                    
+            messages.success(request, 'Transferência de estoque realizada com sucesso!')
+            return redirect('transferencia_list')
+    else:
+        form = TransferenciaForm()
+        formset = ItemTransferenciaFormSet()
+        
+        # Filtra os locais de origem e destino para a empresa logada
+        form.fields['local_origem'].queryset = LocalEstoque.objects.filter(empresa=empresa, ativo=True)
+        form.fields['local_destino'].queryset = LocalEstoque.objects.filter(empresa=empresa, ativo=True)
+        for f in formset.forms: f.fields['produto'].queryset = Produto.objects.filter(ativo=True)
+        
+    regras = {p.id: {'lote': p.controla_lote} for p in Produto.objects.filter(ativo=True)}
+    return render(request, 'estoque/transferencia_form.html', {
+        'form': form, 
+        'formset': formset, 
+        'produtos_regras_json': json.dumps(regras)
+    })
+
+# --- FUNÇÃO DE SEGURANÇA (Verifica se já foi consumido) ---
+def checar_bloqueio_transferencia(transf):
+    """
+    Verifica se a transferência pode ser desfeita. 
+    Se o Destino já tiver consumido/movimentado a peça a ponto de ter um saldo menor 
+    do que o recebido, a edição/exclusão é bloqueada.
+    """
+    for item in transf.itens.all():
+        p = item.produto
+        lote = item.lote
+        local = transf.local_destino
+        
+        entradas = ItemEntrada.objects.filter(produto=p, entrada__local=local)
+        saidas = ItemSaida.objects.filter(produto=p, saida__local=local)
+        baixas = ItemBaixa.objects.filter(produto=p, baixa__local=local)
+        transf_in = ItemTransferencia.objects.filter(produto=p, transferencia__local_destino=local)
+        transf_out = ItemTransferencia.objects.filter(produto=p, transferencia__local_origem=local)
+        manuts = Manutencao.objects.filter(produto=p, local=local, status__in=['PENDENTE', 'DESCARTADO'])
+        
+        if p.controla_lote and lote:
+            entradas = entradas.filter(lote=lote)
+            saidas = saidas.filter(lote=lote)
+            baixas = baixas.filter(lote=lote)
+            transf_in = transf_in.filter(lote=lote)
+            transf_out = transf_out.filter(lote=lote)
+            manuts = manuts.filter(lote=lote)
+            
+        e = entradas.aggregate(t=Sum('quantidade'))['t'] or 0
+        s = saidas.aggregate(t=Sum('quantidade'))['t'] or 0
+        b = baixas.aggregate(t=Sum('quantidade'))['t'] or 0
+        ti = transf_in.aggregate(t=Sum('quantidade'))['t'] or 0
+        to = transf_out.aggregate(t=Sum('quantidade'))['t'] or 0
+        m = manuts.aggregate(t=Sum('quantidade'))['t'] or 0
+        
+        saldo_atual_destino = (e + ti) - (s + b + to + m)
+        
+        if saldo_atual_destino < item.quantidade:
+            return False, f"O produto {p.nome} (Lote: {lote or 'Geral'}) já foi consumido ou movimentado no destino ({local.nome})."
+            
+    return True, ""
+
+
+@login_required
+def transferencia_edit(request, id):
+    empresa_id = request.session.get('empresa_id')
+    transf = get_object_or_404(Transferencia, id=id, empresa_id=empresa_id)
+    
+    # 1. Trava de Segurança
+    pode_editar, mensagem_erro = checar_bloqueio_transferencia(transf)
+    if not pode_editar:
+        messages.error(request, f"Edição Bloqueada: {mensagem_erro}")
+        return redirect('transferencia_list')
+
+    if request.method == 'POST':
+        form = TransferenciaForm(request.POST, instance=transf)
+        formset = ItemTransferenciaFormSet(request.POST, instance=transf)
+        
+        if request.POST.get('local_origem'):
+            formset.local_id = request.POST.get('local_origem')
+            
+        if form.is_valid() and formset.is_valid():
+            with transaction.atomic():
+                # Guarda os itens antigos para recalcular o saldo se o usuário os apagar
+                old_items = list(transf.itens.all())
+                
+                transf = form.save(commit=False)
+                transf.usuario_registro = request.user
+                transf.save()
+                
+                formset.instance = transf
+                itens = formset.save()
+                
+                HistoricoTransferencia.objects.create(transferencia=transf, usuario=request.user, detalhes="Transferência editada.")
+                
+                # Recalcula a origem e destino de todos os itens antigos e novos
+                afetados = set(i.produto for i in itens) | set(i.produto for i in old_items)
+                for p in afetados:
+                    p.atualizar_estoque(local=transf.local_origem)
+                    p.atualizar_estoque(local=transf.local_destino)
+                    
+            messages.success(request, 'Transferência atualizada com sucesso!')
+            return redirect('transferencia_list')
+    else:
+        form = TransferenciaForm(instance=transf)
+        formset = ItemTransferenciaFormSet(instance=transf)
+        
+        form.fields['local_origem'].queryset = LocalEstoque.objects.filter(empresa_id=empresa_id, ativo=True)
+        form.fields['local_destino'].queryset = LocalEstoque.objects.filter(empresa_id=empresa_id, ativo=True)
+        for f in formset.forms: f.fields['produto'].queryset = Produto.objects.filter(ativo=True)
+        
+    regras = {p.id: {'lote': p.controla_lote} for p in Produto.objects.filter(ativo=True)}
+    return render(request, 'estoque/transferencia_form.html', {
+        'form': form, 'formset': formset, 'produtos_regras_json': json.dumps(regras), 'transferencia': transf
+    })
+
+
+@login_required
+def transferencia_delete(request, id):
+    empresa_id = request.session.get('empresa_id')
+    transf = get_object_or_404(Transferencia, id=id, empresa_id=empresa_id)
+    
+    # 1. Trava de Segurança
+    pode_excluir, mensagem_erro = checar_bloqueio_transferencia(transf)
+    if not pode_excluir:
+        messages.error(request, f"Exclusão Bloqueada: {mensagem_erro}")
+        return redirect('transferencia_list')
+        
+    if request.method == 'POST':
+        with transaction.atomic():
+            auditoria = AuditoriaExclusao.objects.create(
+                empresa_id=empresa_id, tipo_movimento='TRANSFERENCIA',
+                identificador=f"Transf. #{transf.id} (De: {transf.local_origem.nome} Para: {transf.local_destino.nome})",
+                usuario=request.user
+            )
+            afetados = []
+            locais_afetados = [transf.local_origem, transf.local_destino]
+            
+            for item in transf.itens.all():
+                ItemAuditoriaExclusao.objects.create(
+                    auditoria=auditoria, produto_nome=item.produto.nome,
+                    quantidade=item.quantidade, lote=item.lote
+                )
+                afetados.append(item.produto)
+                
+            transf.delete()
+            
+            # Devolve os saldos para os lugares corretos
+            for p in set(afetados):
+                for loc in locais_afetados:
+                    p.atualizar_estoque(local=loc)
+                    
+        messages.success(request, 'Transferência excluída! Os saldos retornaram ao estoque de origem.')
+        return redirect('transferencia_list')
+        
+    return render(request, 'estoque/transferencia_confirm_delete.html', {'transferencia': transf})

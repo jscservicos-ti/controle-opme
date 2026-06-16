@@ -1,6 +1,5 @@
 {% extends 'estoque/base.html' %}
 {% block content %}
-
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
 
@@ -14,13 +13,17 @@
     <div class="card shadow-sm border-primary mb-4">
         <div class="card-header bg-primary text-white fw-bold">Detalhes do Envio</div>
         <div class="card-body row">
-            
             {% if form.non_field_errors %}
             <div class="col-12 mb-3">
                 <div class="alert alert-danger fw-bold"><i class="bi bi-exclamation-triangle"></i> {{ form.non_field_errors.0 }}</div>
             </div>
             {% endif %}
             
+            <div class="col-md-3 mb-3">
+                <label class="form-label fw-bold">Retirar de qual Estoque?</label>
+                {{ form.local }}
+                <div class="text-danger small fw-bold">{{ form.local.errors }}</div>
+            </div>
             <div class="col-md-4 mb-3">
                 <label class="form-label fw-bold">Produto</label>
                 {{ form.produto }}
@@ -32,7 +35,7 @@
                 <div class="text-danger small fw-bold">{{ form.quantidade.errors }}</div>
             </div>
             <div class="col-md-3 mb-3 campo-lote" style="display:none;">
-                <label class="form-label fw-bold text-danger">Lote c/ Saldo (Obrigatório)</label>
+                <label class="form-label fw-bold text-danger">Lote c/ Saldo</label>
                 {{ form.lote }}
                 <div class="text-danger small fw-bold">{{ form.lote.errors }}</div>
             </div>
@@ -41,35 +44,25 @@
                 {{ form.data_envio }}
                 <div class="text-danger small fw-bold">{{ form.data_envio.errors }}</div>
             </div>
-
             <div class="col-md-4 mb-3">
                 <label class="form-label fw-bold">Defeito</label>
                 {{ form.defeito }}
                 <div class="text-danger small fw-bold">{{ form.defeito.errors }}</div>
             </div>
-            <div class="col-md-4 mb-3">
+            <div class="col-md-5 mb-3">
                 <label class="form-label fw-bold">Especialidade</label>
                 {{ form.especialidade }}
                 <div class="text-danger small fw-bold">{{ form.especialidade.errors }}</div>
             </div>
-            <div class="col-md-4 mb-3">
-                <label class="form-label fw-bold">Prontuário (Opcional)</label>
-                {{ form.prontuario }}
-                <div class="text-danger small fw-bold">{{ form.prontuario.errors }}</div>
-            </div>
-
             <div class="col-12 mb-3 mt-2 border p-3 bg-light rounded">
                 <label class="form-label fw-bold text-primary"><i class="bi bi-camera"></i> Foto do Defeito</label>
                 {% if manutencao and manutencao.foto_defeito %}
                     <br><a href="{{ manutencao.foto_defeito.url }}" target="_blank" class="badge bg-info text-dark mb-2">Ver Foto Atual</a>
                 {% endif %}
                 {{ form.foto_defeito }}
-                <div class="text-danger small fw-bold">{{ form.foto_defeito.errors }}</div>
             </div>
-
         </div>
     </div>
-    
     <div class="text-end mb-5">
         <a href="{% url 'manutencao_list' %}" class="btn btn-secondary me-2">Cancelar</a>
         <button type="submit" class="btn btn-primary fw-bold" id="btn-salvar">Registrar Envio</button>
@@ -80,51 +73,37 @@
     document.addEventListener('DOMContentLoaded', function() {
         const selectProduto = document.querySelector('select[name="produto"]');
         const selectLote = document.querySelector('select[name="lote"]');
+        const selectLocal = document.querySelector('select[name="local"]');
         const inputQtd = document.querySelector('input[name="quantidade"]');
         const btnSalvar = document.getElementById('btn-salvar');
         const divLote = document.querySelector('.campo-lote');
         const regras = JSON.parse('{{ produtos_regras_json|safe }}');
-        
-        // Pega valor atual se estiver editando
         const lotePreselecionado = selectLote.value;
 
         function atualizarLotes() {
             const produtoId = selectProduto.value;
-            
+            const localId = selectLocal.value;
+            if (!localId && produtoId) { alert("Selecione o Estoque no topo."); if(selectProduto.tomselect) selectProduto.tomselect.clear(); return; }
+
             if (produtoId && regras[produtoId] && regras[produtoId].lote) {
                 divLote.style.display = 'block';
-                
-                // Salva a primeira option e limpa o resto
                 selectLote.innerHTML = '<option value="">-- Carregando lotes... --</option>';
-                
-                fetch(`/api/lotes/${produtoId}/?acao=saida`)
+                fetch(`/api/lotes/${produtoId}/?local=${localId}&acao=saida`)
                     .then(response => response.json())
                     .then(data => {
                         selectLote.innerHTML = '<option value="">-- Selecione o Lote --</option>';
                         if (data.lotes.length > 0) {
-                            let optionExiste = false;
                             data.lotes.forEach(item => {
                                 let option = new Option(`${item.lote} (Saldo: ${item.saldo})`, item.lote);
                                 option.dataset.saldo = item.saldo;
-                                if (lotePreselecionado && item.lote === lotePreselecionado) {
-                                    option.selected = true;
-                                    optionExiste = true;
-                                }
+                                if (lotePreselecionado && item.lote === lotePreselecionado) option.selected = true;
                                 selectLote.add(option);
                             });
-                            
-                            // Se está editando e o lote não retornou na API (ex: saldo estava 0), o sistema injeta ele via backend
-                        } else if (!lotePreselecionado) {
-                            selectLote.innerHTML = '<option value="">-- Sem saldo disponível --</option>';
-                        }
+                        } else { selectLote.innerHTML = '<option value="">-- Sem saldo neste local --</option>'; }
                     });
-            } else {
-                divLote.style.display = 'none';
-                selectLote.innerHTML = '';
-            }
+            } else { divLote.style.display = 'none'; selectLote.innerHTML = ''; }
         }
         
-        // Validação Frontend Client-Side
         btnSalvar.addEventListener('click', function(e) {
             const produtoId = selectProduto.value;
             if (produtoId && regras[produtoId] && regras[produtoId].lote) {
@@ -132,29 +111,18 @@
                 if(optionSelecionada && optionSelecionada.value !== "") {
                     const saldoDisponivel = parseFloat(optionSelecionada.dataset.saldo);
                     const qtdPedida = parseFloat(inputQtd.value);
-
-                    // Só barra via JS se tiver o saldo carregado no dataset
                     if (!isNaN(saldoDisponivel) && qtdPedida > saldoDisponivel) {
-                        e.preventDefault();
-                        alert(`Erro: Você está tentando enviar ${qtdPedida}, mas o lote possui apenas ${saldoDisponivel} em estoque.`);
+                        e.preventDefault(); alert(`Erro: Saldo insuficiente. Esse local possui apenas ${saldoDisponivel}.`);
                     }
                 }
             }
         });
 
-        // --- INTEGRAÇÃO COM O TOM SELECT ---
         if (selectProduto) {
-            new TomSelect(selectProduto, {
-                create: false,
-                placeholder: "Pesquise cód. ou nome...",
-                onChange: function(value) {
-                    // Quando o usuário selecionar um produto na busca, atualiza os lotes disponíveis
-                    atualizarLotes();
-                }
-            });
+            new TomSelect(selectProduto, { create: false, placeholder: "Pesquise...", onChange: function() { atualizarLotes(); } });
         }
-        
-        atualizarLotes(); // Roda ao carregar para caso de edição
+        selectLocal.addEventListener('change', () => { if(selectProduto.tomselect) selectProduto.tomselect.clear(); });
+        if(selectProduto.value) atualizarLotes();
     });
 </script>
 {% endblock %}

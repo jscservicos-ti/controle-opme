@@ -1,6 +1,5 @@
 {% extends 'estoque/base.html' %}
 {% block content %}
-
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
 
@@ -8,10 +7,15 @@
 <form method="post" id="baixa-form" novalidate>
     {% csrf_token %}
     <div class="card mb-4 border-danger">
-        <div class="card-header bg-danger text-white fw-bold">Motivo da Baixa</div>
+        <div class="card-header bg-danger text-white fw-bold">Motivo e Local da Baixa</div>
         <div class="card-body row">
             <div class="col-md-6">
-                <label class="form-label">Selecione o Motivo</label>
+                <label class="form-label fw-bold">De qual Estoque está saindo?</label>
+                {{ form.local }}
+                <div class="text-danger small">{{ form.local.errors }}</div>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label fw-bold">Selecione o Motivo</label>
                 {{ form.motivo }}
                 <div class="text-danger small">{{ form.motivo.errors }}</div>
             </div>
@@ -24,7 +28,6 @@
             <button type="button" class="btn btn-sm btn-light" id="add-item-btn">+ Adicionar Linha</button>
         </div>
         <div class="card-body">
-            
             {% if formset.non_form_errors %}
             <div class="alert alert-danger shadow-sm">
                 <strong>Atenção ao Estoque:</strong>
@@ -40,7 +43,7 @@
                 <div class="item-form row mb-3 pb-3 border-bottom align-items-end">
                     {{ form_item.id }}
                     <div class="col-md-6">
-                        <label class="small">Produto (Apenas itens com saldo)</label>
+                        <label class="small">Produto</label>
                         {{ form_item.produto }}
                         <div class="text-danger small fw-bold">{{ form_item.produto.errors }}</div>
                     </div>
@@ -57,7 +60,6 @@
                 </div>
                 {% endfor %}
             </div>
-            <small class="text-muted d-block mt-3">Nota: Se você descartou lotes diferentes do mesmo produto, adicione o produto novamente em uma nova linha e selecione o outro lote.</small>
         </div>
     </div>
     
@@ -70,18 +72,9 @@
 <div id="empty-form" style="display:none;">
     <div class="item-form row mb-3 pb-3 border-bottom align-items-end">
         {{ formset.empty_form.id }}
-        <div class="col-md-6">
-            <label class="small">Produto (Apenas itens com saldo)</label>
-            {{ formset.empty_form.produto }}
-        </div>
-        <div class="col-md-2">
-            <label class="small">Qtd</label>
-            {{ formset.empty_form.quantidade }}
-        </div>
-        <div class="col-md-4 campo-lote" style="display:none;">
-            <label class="small text-danger fw-bold">Selecione o Lote Descartado</label>
-            {{ formset.empty_form.lote }}
-        </div>
+        <div class="col-md-6"><label class="small">Produto</label>{{ formset.empty_form.produto }}</div>
+        <div class="col-md-2"><label class="small">Qtd</label>{{ formset.empty_form.quantidade }}</div>
+        <div class="col-md-4 campo-lote" style="display:none;"><label class="small text-danger fw-bold">Selecione o Lote Descartado</label>{{ formset.empty_form.lote }}</div>
     </div>
 </div>
 
@@ -92,11 +85,13 @@
         const totalForms = document.getElementById('id_itens-TOTAL_FORMS');
         const emptyForm = document.getElementById('empty-form').innerHTML;
         const regras = JSON.parse('{{ produtos_regras_json|safe }}');
+        const selectLocal = document.querySelector('select[name="local"]');
 
         async function atualizarLote(selectProduto) {
             const row = selectProduto.closest('.item-form');
             const campoLoteDiv = row.querySelector('.campo-lote');
             const inputQuantidade = row.querySelector('input[name$="-quantidade"]');
+            const localId = selectLocal.value;
             
             let inputLote = row.querySelector('[name$="-lote"]');
             const loteName = inputLote.getAttribute('name');
@@ -104,106 +99,67 @@
             const produtoId = selectProduto.value;
             const loteAtual = inputLote.value;
 
+            if (!localId && produtoId) {
+                alert("Por favor, selecione primeiro o Estoque no topo.");
+                if(selectProduto.tomselect) selectProduto.tomselect.clear();
+                return;
+            }
+
             if (produtoId && regras[produtoId] && regras[produtoId].lote) {
                 campoLoteDiv.style.display = 'block';
-                
                 let selectLote = document.createElement('select');
                 selectLote.className = 'form-select border-danger';
-                selectLote.name = loteName;
-                selectLote.id = loteId;
+                selectLote.name = loteName; selectLote.id = loteId;
                 selectLote.innerHTML = '<option value="">Buscando lotes...</option>';
-                
                 inputLote.parentNode.replaceChild(selectLote, inputLote);
                 inputLote = selectLote; 
 
                 try {
-                    const response = await fetch(`/api/lotes/${produtoId}/?acao=baixa`);
+                    const response = await fetch(`/api/lotes/${produtoId}/?local=${localId}&acao=baixa`);
                     const data = await response.json();
                     
                     inputLote.innerHTML = '<option value="">-- Escolha um lote --</option>';
-                    
                     if (data.lotes.length === 0 && !loteAtual) {
-                        inputLote.innerHTML = '<option value="">SEM ESTOQUE DISPONÍVEL</option>';
+                        inputLote.innerHTML = '<option value="">SEM ESTOQUE NESTE LOCAL</option>';
                         inputQuantidade.max = 0;
                     } else {
-                        let loteEncontrado = false;
                         data.lotes.forEach(l => {
                             let opt = document.createElement('option');
-                            opt.value = l.lote;
-                            opt.text = `Lote: ${l.lote} (Saldo: ${l.saldo})`;
-                            opt.dataset.saldo = l.saldo;
-                            if (l.lote === loteAtual) {
-                                opt.selected = true;
-                                loteEncontrado = true;
-                            }
+                            opt.value = l.lote; opt.text = `Lote: ${l.lote} (Saldo: ${l.saldo})`; opt.dataset.saldo = l.saldo;
+                            if (l.lote === loteAtual) opt.selected = true;
                             inputLote.appendChild(opt);
                         });
-                        
-                        if (loteAtual && !loteEncontrado) {
-                            let opt = document.createElement('option');
-                            opt.value = loteAtual;
-                            opt.text = `Lote: ${loteAtual} (Selecionado)`;
-                            opt.selected = true;
-                            inputLote.appendChild(opt);
-                        }
                     }
-                    
-                    inputLote.addEventListener('change', function() {
-                        const selectedOpt = this.options[this.selectedIndex];
-                        if (selectedOpt && selectedOpt.dataset.saldo) {
-                            inputQuantidade.max = selectedOpt.dataset.saldo;
-                            inputQuantidade.placeholder = `Máx: ${selectedOpt.dataset.saldo}`;
-                        }
-                    });
-
-                } catch (error) {
-                    inputLote.innerHTML = '<option value="">Erro na busca</option>';
-                }
+                } catch (error) { inputLote.innerHTML = '<option value="">Erro</option>'; }
             } else {
                 campoLoteDiv.style.display = 'none';
                 let textLote = document.createElement('input');
-                textLote.type = 'text';
-                textLote.className = 'form-control';
-                textLote.name = loteName;
-                textLote.id = loteId;
-                textLote.value = loteAtual;
+                textLote.type = 'text'; textLote.className = 'form-control'; textLote.name = loteName; textLote.id = loteId; textLote.value = loteAtual;
                 inputLote.parentNode.replaceChild(textLote, inputLote);
-                
-                inputQuantidade.removeAttribute('max');
-                inputQuantidade.placeholder = '';
+                inputQuantidade.removeAttribute('max'); inputQuantidade.placeholder = '';
             }
         }
 
-        // --- FUNÇÃO DO TOM SELECT ---
         function aplicarBusca(selectElement) {
             new TomSelect(selectElement, {
-                create: false,
-                placeholder: "Pesquise cód. ou nome...",
-                onChange: function(value) {
-                    // Atualiza os lotes disponíveis ao selecionar
-                    atualizarLote(selectElement);
-                }
+                create: false, placeholder: "Pesquise cód. ou nome...",
+                onChange: function() { atualizarLote(selectElement); }
             });
         }
 
-        // Aplica a barra de busca nos itens que já carregaram na tela
         document.querySelectorAll('.item-form select[name$="-produto"]').forEach(s => {
-            if(!s.id.includes('__prefix__')){ 
-                aplicarBusca(s); 
-                atualizarLote(s); 
-            }
+            if(!s.id.includes('__prefix__')){ aplicarBusca(s); atualizarLote(s); }
         });
 
-        // Adiciona a barra de busca na nova linha quando o botão "+ Adicionar Linha" for clicado
+        selectLocal.addEventListener('change', function() {
+            document.querySelectorAll('.item-form select[name$="-produto"]').forEach(s => { if(s.tomselect) s.tomselect.clear(); });
+        });
+
         btnAdd.addEventListener('click', function() {
             let count = parseInt(totalForms.value);
             container.insertAdjacentHTML('beforeend', emptyForm.replace(/__prefix__/g, count));
             totalForms.value = count + 1;
-            
-            const newSelects = container.querySelectorAll('.item-form select[name$="-produto"]');
-            const newSelect = newSelects[newSelects.length - 1];
-            
-            aplicarBusca(newSelect);
+            aplicarBusca(container.querySelectorAll('.item-form select[name$="-produto"]')[count]);
         });
     });
 </script>

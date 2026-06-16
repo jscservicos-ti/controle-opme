@@ -1,0 +1,50 @@
+{% extends 'estoque/base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-diagram-3 text-primary me-2"></i> Locais de Estoque</h2>
+    <a href="{% url 'local_estoque_create' %}" class="btn btn-primary fw-bold">+ Novo Local</a>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <table class="table table-striped table-hover align-middle m-0 text-center">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th class="text-start">Nome do Local</th>
+                    <th>Tipo</th>
+                    <th>Status</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for loc in locais %}
+                <tr>
+                    <td><strong>{{ loc.id }}</strong></td>
+                    <td class="text-start fw-bold">{{ loc.nome }}</td>
+                    <td>
+                        {% if loc.tipo == 'ARMAZENAMENTO' %}
+                            <span class="badge bg-secondary"><i class="bi bi-box-seam"></i> Armazenamento</span>
+                        {% else %}
+                            <span class="badge bg-info text-dark"><i class="bi bi-hospital"></i> Distribuição</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if loc.ativo %}
+                            <span class="badge bg-success">Ativo</span>
+                        {% else %}
+                            <span class="badge bg-danger">Inativo</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'local_estoque_edit' loc.id %}" class="btn btn-sm btn-warning">Editar</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center py-4 text-muted">Nenhum local cadastrado.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -29,6 +29,7 @@
                             <i class="bi bi-folder2-open me-1"></i> Cadastros
                         </a>
                         <ul class="dropdown-menu shadow" aria-labelledby="cadastrosDropdown">
+                            <li><a class="dropdown-item" href="{% url 'local_estoque_list' %}">Locais de Estoque</a></li>
                             <li><a class="dropdown-item" href="{% url 'produto_list' %}">Produtos</a></li>
                             <li><a class="dropdown-item" href="{% url 'especie_list' %}">Espécies</a></li>
                             <li><a class="dropdown-item" href="{% url 'marca_list' %}">Marcas</a></li>
@@ -52,6 +53,8 @@
                             <li><a class="dropdown-item text-danger fw-bold" href="{% url 'baixa_list' %}"><i class="bi bi-trash3 me-2"></i> Descarte</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item text-primary fw-bold" href="{% url 'manutencao_list' %}"><i class="bi bi-tools me-2"></i> Manutenção</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'transferencia_list' %}"><i class="bi bi-arrow-left-right text-primary me-2"></i> Transferências</a></li>
                         </ul>
                     </li>
                     

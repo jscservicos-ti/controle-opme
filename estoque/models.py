@@ -35,6 +35,22 @@ class Fornecedor(models.Model):
     ativo = models.BooleanField(default=True, verbose_name="Ativo?")
     def __str__(self): return f"[{self.id}] {self.nome}"
 
+# ==========================================
+# NOVO: LOCAL DE ESTOQUE
+# ==========================================
+class LocalEstoque(models.Model):
+    TIPO_CHOICES = (
+        ('ARMAZENAMENTO', 'Armazenamento (Almoxarifado/Depósito)'),
+        ('DISTRIBUICAO', 'Distribuição (Setor/Farmácia)'),
+    )
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='locais')
+    nome = models.CharField(max_length=200)
+    tipo = models.CharField(max_length=20, choices=TIPO_CHOICES, default='ARMAZENAMENTO')
+    ativo = models.BooleanField(default=True, verbose_name="Ativo?")
+
+    def __str__(self): return f"{self.nome} ({self.get_tipo_display()})"
+
+
 class Produto(models.Model):
     nome = models.CharField(max_length=200)
     especie = models.ForeignKey(Especie, on_delete=models.PROTECT)
@@ -46,32 +62,54 @@ class Produto(models.Model):
 
     def __str__(self): return f"[{self.id}] {self.nome}"
 
-    def atualizar_estoque(self, empresa):
-        t_in = ItemEntrada.objects.filter(produto=self, entrada__empresa=empresa).aggregate(t=Sum('quantidade'))['t'] or 0
-        t_out = ItemSaida.objects.filter(produto=self, saida__empresa=empresa).aggregate(t=Sum('quantidade'))['t'] or 0
-        t_loss = ItemBaixa.objects.filter(produto=self, baixa__empresa=empresa).aggregate(t=Sum('quantidade'))['t'] or 0
+    def atualizar_estoque(self, local=None, empresa=None):
+        # Amortecedor temporário para o sistema não quebrar na transição
+        if not local and empresa:
+            local = LocalEstoque.objects.filter(empresa=empresa).first()
+            if not local: return
+        elif not local:
+            return
+
+        # 1. Entradas que chegaram neste local
+        t_in = ItemEntrada.objects.filter(produto=self, entrada__local=local).aggregate(t=Sum('quantidade'))['t'] or 0
         
+        # 2. Transferências que entraram neste local
+        t_transf_in = ItemTransferencia.objects.filter(produto=self, transferencia__local_destino=local).aggregate(t=Sum('quantidade'))['t'] or 0
+
+        # 3. Transferências que saíram deste local
+        t_transf_out = ItemTransferencia.objects.filter(produto=self, transferencia__local_origem=local).aggregate(t=Sum('quantidade'))['t'] or 0
+
+        # 4. Saídas (Consumo) deste local
+        t_out = ItemSaida.objects.filter(produto=self, saida__local=local).aggregate(t=Sum('quantidade'))['t'] or 0
+        
+        # 5. Baixas (Descarte) deste local
+        t_loss = ItemBaixa.objects.filter(produto=self, baixa__local=local).aggregate(t=Sum('quantidade'))['t'] or 0
+        
+        # 6. Manutenções enviadas deste local
         t_manutencao = Manutencao.objects.filter(
             produto=self, 
-            empresa=empresa, 
+            local=local, 
             status__in=['PENDENTE', 'DESCARTADO']
         ).aggregate(t=Sum('quantidade'))['t'] or 0
         
-        saldo = t_in - t_out - t_loss - t_manutencao
+        # Fórmula Mestra do Saldo
+        saldo = (t_in + t_transf_in) - (t_transf_out + t_out + t_loss + t_manutencao)
         
-        estoque_obj, created = Estoque.objects.get_or_create(produto=self, empresa=empresa)
+        estoque_obj, created = Estoque.objects.get_or_create(produto=self, local=local, defaults={'empresa': local.empresa})
         estoque_obj.quantidade = saldo
         estoque_obj.save()
 
 class Estoque(models.Model):
     produto = models.ForeignKey(Produto, on_delete=models.CASCADE, related_name='estoques')
     empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='estoques')
+    local = models.ForeignKey(LocalEstoque, on_delete=models.CASCADE, related_name='estoques', null=True, blank=True)
     quantidade = models.IntegerField(default=0)
     class Meta:
-        unique_together = ('produto', 'empresa')
+        unique_together = ('produto', 'local')
 
 class Entrada(models.Model):
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT)
+    local = models.ForeignKey(LocalEstoque, on_delete=models.PROTECT, related_name='entradas', null=True, blank=True)
     fornecedor = models.ForeignKey(Fornecedor, on_delete=models.PROTECT)
     nota_fiscal = models.CharField(max_length=50, blank=True, null=True)
     data_entrada = models.DateTimeField(auto_now_add=True)
@@ -92,6 +130,7 @@ class HistoricoEntrada(models.Model):
 
 class Saida(models.Model):
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT)
+    local = models.ForeignKey(LocalEstoque, on_delete=models.PROTECT, related_name='saidas', null=True, blank=True)
     paciente = models.CharField(max_length=200)
     atendimento = models.CharField(max_length=50)
     aviso_cirurgia = models.CharField(max_length=50)
@@ -117,6 +156,7 @@ class MotivoBaixa(models.Model):
 
 class Baixa(models.Model):
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT)
+    local = models.ForeignKey(LocalEstoque, on_delete=models.PROTECT, related_name='baixas', null=True, blank=True)
     motivo = models.ForeignKey(MotivoBaixa, on_delete=models.PROTECT)
     data_baixa = models.DateTimeField(auto_now_add=True)
     usuario_registro = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='baixas_criadas')
@@ -133,12 +173,36 @@ class HistoricoBaixa(models.Model):
     data_alteracao = models.DateTimeField(auto_now_add=True)
     detalhes = models.TextField()
 
+# ==========================================
+# NOVO: TRANSFERÊNCIAS ENTRE LOCAIS
+# ==========================================
+class Transferencia(models.Model):
+    empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT)
+    local_origem = models.ForeignKey(LocalEstoque, on_delete=models.PROTECT, related_name='transferencias_enviadas')
+    local_destino = models.ForeignKey(LocalEstoque, on_delete=models.PROTECT, related_name='transferencias_recebidas')
+    data_transferencia = models.DateTimeField(auto_now_add=True)
+    usuario_registro = models.ForeignKey(Usuario, on_delete=models.PROTECT, related_name='transferencias_realizadas')
+
+class ItemTransferencia(models.Model):
+    transferencia = models.ForeignKey(Transferencia, on_delete=models.CASCADE, related_name='itens')
+    produto = models.ForeignKey(Produto, on_delete=models.PROTECT)
+    quantidade = models.IntegerField()
+    lote = models.CharField(max_length=50, blank=True, null=True)
+
+class HistoricoTransferencia(models.Model):
+    transferencia = models.ForeignKey(Transferencia, on_delete=models.CASCADE, related_name='historico')
+    usuario = models.ForeignKey(Usuario, on_delete=models.PROTECT)
+    data_alteracao = models.DateTimeField(auto_now_add=True)
+    detalhes = models.TextField()
+
+
 class AuditoriaExclusao(models.Model):
     TIPO_CHOICES = [
         ('ENTRADA', 'Entrada (NF)'), 
         ('SAIDA', 'Saída (Paciente)'), 
         ('BAIXA', 'Baixa (Descarte)'),
-        ('MANUTENCAO', 'Manutenção') # <-- Adicionado aqui
+        ('MANUTENCAO', 'Manutenção'),
+        ('TRANSFERENCIA', 'Transferência') # <-- Adicionado
     ]
     empresa = models.ForeignKey(Empresa, on_delete=models.PROTECT)
     tipo_movimento = models.CharField(max_length=15, choices=TIPO_CHOICES)
@@ -170,6 +234,7 @@ class Manutencao(models.Model):
         ('DESCARTADO', 'Concluído (Não Reparado / Descartado)'),
     )
     empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE)
+    local = models.ForeignKey(LocalEstoque, on_delete=models.PROTECT, related_name='manutencoes', null=True, blank=True)
     produto = models.ForeignKey(Produto, on_delete=models.PROTECT)
     quantidade = models.PositiveIntegerField(default=1)
     lote = models.CharField(max_length=50, blank=True, null=True)

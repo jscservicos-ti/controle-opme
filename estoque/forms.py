@@ -1,12 +1,13 @@
 from django import forms
 from django.forms import inlineformset_factory
 from django.forms.models import BaseInlineFormSet
-from django.db.models import Q, Sum
+from django.db.models import Sum
 from datetime import date
 from .models import (
     Produto, Especie, Fornecedor, Entrada, ItemEntrada, MotivoBaixa, 
     Saida, ItemSaida, Baixa, ItemBaixa, Usuario, Empresa,
-    Defeito, Especialidade, Manutencao, Marca
+    Defeito, Especialidade, Manutencao, Marca,
+    LocalEstoque, Transferencia, ItemTransferencia # <-- NOVOS MODELOS
 )
 
 class MarcaForm(forms.ModelForm):
@@ -14,6 +15,16 @@ class MarcaForm(forms.ModelForm):
         model = Marca
         fields = ['nome', 'ativo']
         widgets = {'nome': forms.TextInput(attrs={'class': 'form-control'}), 'ativo': forms.CheckboxInput(attrs={'class': 'form-check-input'})}
+
+class LocalEstoqueForm(forms.ModelForm):
+    class Meta:
+        model = LocalEstoque
+        fields = ['nome', 'tipo', 'ativo']
+        widgets = {
+            'nome': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex: Farmácia Central, Centro Cirúrgico...'}),
+            'tipo': forms.Select(attrs={'class': 'form-select'}),
+            'ativo': forms.CheckboxInput(attrs={'class': 'form-check-input'})
+        }
 
 class EmpresaForm(forms.ModelForm):
     class Meta:
@@ -63,8 +74,8 @@ class ProdutoForm(forms.ModelForm):
 class EntradaForm(forms.ModelForm):
     class Meta:
         model = Entrada
-        fields = ['fornecedor', 'nota_fiscal']
-        widgets = {'fornecedor': forms.Select(attrs={'class': 'form-select'}), 'nota_fiscal': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Opcional'})}
+        fields = ['local', 'fornecedor', 'nota_fiscal'] # Adicionado o Local
+        widgets = {'local': forms.Select(attrs={'class': 'form-select'}), 'fornecedor': forms.Select(attrs={'class': 'form-select'}), 'nota_fiscal': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Opcional'})}
 
 class ItemEntradaForm(forms.ModelForm):
     class Meta:
@@ -82,12 +93,18 @@ class ItemEntradaForm(forms.ModelForm):
 
 ItemEntradaFormSet = inlineformset_factory(Entrada, ItemEntrada, form=ItemEntradaForm, extra=1, can_delete=True)
 
+# ==========================================
+# SUPER VALIDADOR DE ESTOQUE (ATUALIZADO)
+# ==========================================
 class ValidaEstoqueFormSet(BaseInlineFormSet):
     def clean(self):
         super().clean()
         if any(self.errors): return
-        empresa_id = getattr(self, 'empresa_id', None)
-        if not empresa_id: return
+        
+        # Agora o validador confere o saldo baseado no LOCAL, não mais na empresa inteira
+        local_id = getattr(self, 'local_id', None)
+        if not local_id: return
+        
         consumo_tela = {}
         for form in self.forms:
             if form.cleaned_data and not form.cleaned_data.get('DELETE', False):
@@ -98,28 +115,55 @@ class ValidaEstoqueFormSet(BaseInlineFormSet):
                 chave = f"{p.id}_{lote}" if lote else f"{p.id}_geral"
                 if chave in consumo_tela: consumo_tela[chave]['qtd'] += qtd
                 else: consumo_tela[chave] = {'produto': p, 'lote': lote, 'qtd': qtd}
+                
         for chave, dados in consumo_tela.items():
             p = dados['produto']
             lote = dados['lote']
             qtd_solicitada = dados['qtd']
-            entradas = ItemEntrada.objects.filter(produto=p, entrada__empresa_id=empresa_id)
-            saidas = ItemSaida.objects.filter(produto=p, saida__empresa_id=empresa_id)
-            baixas = ItemBaixa.objects.filter(produto=p, baixa__empresa_id=empresa_id)
+            
+            # Filtra todas as movimentações APENAS neste local específico
+            entradas = ItemEntrada.objects.filter(produto=p, entrada__local_id=local_id)
+            saidas = ItemSaida.objects.filter(produto=p, saida__local_id=local_id)
+            baixas = ItemBaixa.objects.filter(produto=p, baixa__local_id=local_id)
+            transf_in = ItemTransferencia.objects.filter(produto=p, transferencia__local_destino_id=local_id)
+            transf_out = ItemTransferencia.objects.filter(produto=p, transferencia__local_origem_id=local_id)
+            manutencoes = Manutencao.objects.filter(produto=p, local_id=local_id, status__in=['PENDENTE', 'DESCARTADO'])
+            
             if p.controla_lote and lote:
-                entradas, saidas, baixas = entradas.filter(lote=lote), saidas.filter(lote=lote), baixas.filter(lote=lote)
-            t_in, t_out, t_loss = entradas.aggregate(t=Sum('quantidade'))['t'] or 0, saidas.aggregate(t=Sum('quantidade'))['t'] or 0, baixas.aggregate(t=Sum('quantidade'))['t'] or 0
-            saldo_real = t_in - t_out - t_loss
+                entradas = entradas.filter(lote=lote)
+                saidas = saidas.filter(lote=lote)
+                baixas = baixas.filter(lote=lote)
+                transf_in = transf_in.filter(lote=lote)
+                transf_out = transf_out.filter(lote=lote)
+                manutencoes = manutencoes.filter(lote=lote)
+                
+            t_in = entradas.aggregate(t=Sum('quantidade'))['t'] or 0
+            t_out = saidas.aggregate(t=Sum('quantidade'))['t'] or 0
+            t_loss = baixas.aggregate(t=Sum('quantidade'))['t'] or 0
+            t_transf_in = transf_in.aggregate(t=Sum('quantidade'))['t'] or 0
+            t_transf_out = transf_out.aggregate(t=Sum('quantidade'))['t'] or 0
+            t_manutencao = manutencoes.aggregate(t=Sum('quantidade'))['t'] or 0
+            
+            # Novo cálculo de saldo do local
+            saldo_real = (t_in + t_transf_in) - (t_out + t_loss + t_transf_out + t_manutencao)
+            
+            # Se for edição, devolve a quantidade atual para não barrar o próprio save
             if self.instance.pk:
-                if hasattr(self.instance, 'paciente'): saldo_real += ItemSaida.objects.filter(saida=self.instance, produto=p, lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
-                elif hasattr(self.instance, 'motivo'): saldo_real += ItemBaixa.objects.filter(baixa=self.instance, produto=p, lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
+                if hasattr(self.instance, 'paciente'): 
+                    saldo_real += ItemSaida.objects.filter(saida=self.instance, produto=p, lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
+                elif hasattr(self.instance, 'motivo'): 
+                    saldo_real += ItemBaixa.objects.filter(baixa=self.instance, produto=p, lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
+                elif hasattr(self.instance, 'local_origem'): 
+                    saldo_real += ItemTransferencia.objects.filter(transferencia=self.instance, produto=p, lote=lote).aggregate(t=Sum('quantidade'))['t'] or 0
+                    
             if qtd_solicitada > saldo_real:
-                raise forms.ValidationError(f"Estoque insuficiente: {p.nome}. Saldo: {saldo_real}.")
+                raise forms.ValidationError(f"Estoque insuficiente no local selecionado: {p.nome}. Saldo: {saldo_real}.")
 
 class SaidaForm(forms.ModelForm):
     class Meta:
         model = Saida
-        fields = ['paciente', 'atendimento', 'aviso_cirurgia']
-        widgets = {'paciente': forms.TextInput(attrs={'class': 'form-control'}), 'atendimento': forms.TextInput(attrs={'class': 'form-control'}), 'aviso_cirurgia': forms.TextInput(attrs={'class': 'form-control'})}
+        fields = ['local', 'paciente', 'atendimento', 'aviso_cirurgia'] # Adicionado o Local
+        widgets = {'local': forms.Select(attrs={'class': 'form-select'}), 'paciente': forms.TextInput(attrs={'class': 'form-control'}), 'atendimento': forms.TextInput(attrs={'class': 'form-control'}), 'aviso_cirurgia': forms.TextInput(attrs={'class': 'form-control'})}
 
 class ItemSaidaForm(forms.ModelForm):
     class Meta:
@@ -138,8 +182,8 @@ class MotivoBaixaForm(forms.ModelForm):
 class BaixaForm(forms.ModelForm):
     class Meta:
         model = Baixa
-        fields = ['motivo']
-        widgets = {'motivo': forms.Select(attrs={'class': 'form-select'})}
+        fields = ['local', 'motivo'] # Adicionado o Local
+        widgets = {'local': forms.Select(attrs={'class': 'form-select'}), 'motivo': forms.Select(attrs={'class': 'form-select'})}
 
 class ItemBaixaForm(forms.ModelForm):
     class Meta:
@@ -148,6 +192,47 @@ class ItemBaixaForm(forms.ModelForm):
         widgets = {'produto': forms.Select(attrs={'class': 'form-select'}), 'quantidade': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}), 'lote': forms.TextInput(attrs={'class': 'form-control'})}
 
 ItemBaixaFormSet = inlineformset_factory(Baixa, ItemBaixa, form=ItemBaixaForm, formset=ValidaEstoqueFormSet, extra=1, can_delete=True)
+
+
+# ==========================================
+# NOVO: FORMULÁRIOS DE TRANSFERÊNCIA
+# ==========================================
+class TransferenciaForm(forms.ModelForm):
+    class Meta:
+        model = Transferencia
+        fields = ['local_origem', 'local_destino']
+        widgets = {
+            'local_origem': forms.Select(attrs={'class': 'form-select'}),
+            'local_destino': forms.Select(attrs={'class': 'form-select'})
+        }
+        labels = {
+            'local_origem': 'Retirar de (Origem)',
+            'local_destino': 'Enviar para (Destino)'
+        }
+        
+    def clean(self):
+        cleaned_data = super().clean()
+        origem = cleaned_data.get('local_origem')
+        destino = cleaned_data.get('local_destino')
+        if origem and destino and origem == destino:
+            raise forms.ValidationError("A origem e o destino não podem ser o mesmo local.")
+        return cleaned_data
+
+class ItemTransferenciaForm(forms.ModelForm):
+    class Meta:
+        model = ItemTransferencia
+        fields = ['produto', 'quantidade', 'lote']
+        widgets = {
+            'produto': forms.Select(attrs={'class': 'form-select'}),
+            'quantidade': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
+            'lote': forms.TextInput(attrs={'class': 'form-control'})
+        }
+
+ItemTransferenciaFormSet = inlineformset_factory(
+    Transferencia, ItemTransferencia, form=ItemTransferenciaForm, 
+    formset=ValidaEstoqueFormSet, extra=1, can_delete=True
+)
+
 
 class DefeitoForm(forms.ModelForm):
     class Meta:
@@ -164,11 +249,12 @@ class EspecialidadeForm(forms.ModelForm):
 class ManutencaoEnvioForm(forms.ModelForm):
     class Meta:
         model = Manutencao
-        fields = ['produto', 'quantidade', 'lote', 'defeito', 'especialidade', 'prontuario', 'data_envio', 'foto_defeito']
+        fields = ['local', 'produto', 'quantidade', 'lote', 'defeito', 'especialidade', 'prontuario', 'data_envio', 'foto_defeito'] # Adicionado o Local
         widgets = {
+            'local': forms.Select(attrs={'class': 'form-select'}),
             'produto': forms.Select(attrs={'class': 'form-select'}),
             'quantidade': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
-            'lote': forms.Select(attrs={'class': 'form-select'}), # Alterado para Select!
+            'lote': forms.Select(attrs={'class': 'form-select'}), 
             'defeito': forms.Select(attrs={'class': 'form-select'}),
             'especialidade': forms.Select(attrs={'class': 'form-select'}),
             'prontuario': forms.TextInput(attrs={'class': 'form-control'}),
@@ -178,40 +264,45 @@ class ManutencaoEnvioForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
+        local = cleaned_data.get('local')
         produto = cleaned_data.get('produto')
         quantidade = cleaned_data.get('quantidade')
         lote = cleaned_data.get('lote')
-        empresa = self.initial.get('empresa')
 
-        if produto and quantidade and empresa:
+        if local and produto and quantidade:
             if produto.controla_lote and not lote:
                 self.add_error('lote', 'Este produto exige a identificação do lote.')
                 return cleaned_data
 
-            entradas = ItemEntrada.objects.filter(produto=produto, entrada__empresa=empresa)
-            saidas = ItemSaida.objects.filter(produto=produto, saida__empresa=empresa)
-            baixas = ItemBaixa.objects.filter(produto=produto, baixa__empresa=empresa)
-            manutencoes = Manutencao.objects.filter(produto=produto, empresa=empresa, status__in=['PENDENTE', 'DESCARTADO'])
+            entradas = ItemEntrada.objects.filter(produto=produto, entrada__local=local)
+            saidas = ItemSaida.objects.filter(produto=produto, saida__local=local)
+            baixas = ItemBaixa.objects.filter(produto=produto, baixa__local=local)
+            transf_in = ItemTransferencia.objects.filter(produto=produto, transferencia__local_destino=local)
+            transf_out = ItemTransferencia.objects.filter(produto=produto, transferencia__local_origem=local)
+            manutencoes = Manutencao.objects.filter(produto=produto, local=local, status__in=['PENDENTE', 'DESCARTADO'])
 
             if produto.controla_lote and lote:
                 entradas = entradas.filter(lote=lote)
                 saidas = saidas.filter(lote=lote)
                 baixas = baixas.filter(lote=lote)
+                transf_in = transf_in.filter(lote=lote)
+                transf_out = transf_out.filter(lote=lote)
                 manutencoes = manutencoes.filter(lote=lote)
 
             t_in = entradas.aggregate(t=Sum('quantidade'))['t'] or 0
             t_out = saidas.aggregate(t=Sum('quantidade'))['t'] or 0
             t_loss = baixas.aggregate(t=Sum('quantidade'))['t'] or 0
+            t_transf_in = transf_in.aggregate(t=Sum('quantidade'))['t'] or 0
+            t_transf_out = transf_out.aggregate(t=Sum('quantidade'))['t'] or 0
             t_manut = manutencoes.aggregate(t=Sum('quantidade'))['t'] or 0
 
-            saldo_atual = t_in - t_out - t_loss - t_manut
+            saldo_atual = (t_in + t_transf_in) - (t_out + t_loss + t_transf_out + t_manut)
 
-            # Se for edição, devolve o valor original ao saldo para permitir que o usuário salve novamente
             if self.instance.pk:
                 saldo_atual += self.instance.quantidade
 
             if quantidade > saldo_atual:
-                raise forms.ValidationError(f"Saldo insuficiente! Saldo físico real para envio: {saldo_atual}")
+                raise forms.ValidationError(f"Saldo insuficiente no local selecionado! Saldo atual para envio: {saldo_atual}")
         
         return cleaned_data
 

@@ -1,6 +1,5 @@
 {% extends 'estoque/base.html' %}
 {% block content %}
-
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
 
@@ -8,15 +7,20 @@
 <form method="post" id="entrada-form" novalidate>
     {% csrf_token %}
     <div class="card mb-4 border-success">
-        <div class="card-header bg-success text-white fw-bold">Dados da Nota Fiscal</div>
+        <div class="card-header bg-success text-white fw-bold">Dados do Recebimento</div>
         <div class="card-body row">
-            <div class="col-md-6">
-                <label class="form-label">Fornecedor</label>
+            <div class="col-md-4">
+                <label class="form-label fw-bold">Estoque de Destino</label>
+                {{ form.local }}
+                <div class="text-danger small">{{ form.local.errors }}</div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-bold">Fornecedor</label>
                 {{ form.fornecedor }}
                 <div class="text-danger small">{{ form.fornecedor.errors }}</div>
             </div>
-            <div class="col-md-6">
-                <label class="form-label">Nota Fiscal</label>
+            <div class="col-md-4">
+                <label class="form-label fw-bold">Nota Fiscal</label>
                 {{ form.nota_fiscal }}
                 <div class="text-danger small">{{ form.nota_fiscal.errors }}</div>
             </div>
@@ -29,7 +33,6 @@
             <button type="button" class="btn btn-sm btn-light" id="add-item-btn">+ Adicionar Linha</button>
         </div>
         <div class="card-body">
-            
             {% if formset.non_form_errors %}
             <div class="alert alert-danger shadow-sm">
                 <strong>Atenção ao Estoque/Validação:</strong>
@@ -44,11 +47,7 @@
                 {% for form_item in formset %}
                 <div class="item-form row mb-3 pb-3 border-bottom align-items-end">
                     {{ form_item.id }}
-                    
-                    <div class="d-none">
-                        {% if form_item.DELETE %}{{ form_item.DELETE }}{% endif %}
-                    </div>
-                    
+                    <div class="d-none">{% if form_item.DELETE %}{{ form_item.DELETE }}{% endif %}</div>
                     <div class="col-md-3">
                         <label class="small">Produto</label>
                         {{ form_item.produto }}
@@ -70,9 +69,7 @@
                         <div class="text-danger small fw-bold">{{ form_item.validade.errors }}</div>
                     </div>
                     <div class="col-md-2 text-end">
-                        <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removerProduto(this)">
-                            Remover
-                        </button>
+                        <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removerProduto(this)">Remover</button>
                     </div>
                 </div>
                 {% endfor %}
@@ -89,32 +86,12 @@
 <div id="empty-form" style="display:none;">
     <div class="item-form row mb-3 pb-3 border-bottom align-items-end">
         {{ formset.empty_form.id }}
-        
-        <div class="d-none">
-            {{ formset.empty_form.DELETE }}
-        </div>
-
-        <div class="col-md-3">
-            <label class="small">Produto</label>
-            {{ formset.empty_form.produto }}
-        </div>
-        <div class="col-md-2">
-            <label class="small">Qtd</label>
-            {{ formset.empty_form.quantidade }}
-        </div>
-        <div class="col-md-3 campo-lote" style="display:none;">
-            <label class="small">Lote</label>
-            {{ formset.empty_form.lote }}
-        </div>
-        <div class="col-md-2 campo-validade" style="display:none;">
-            <label class="small">Validade</label>
-            {{ formset.empty_form.validade }}
-        </div>
-        <div class="col-md-2 text-end">
-            <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removerProduto(this)">
-                Remover
-            </button>
-        </div>
+        <div class="d-none">{{ formset.empty_form.DELETE }}</div>
+        <div class="col-md-3"><label class="small">Produto</label>{{ formset.empty_form.produto }}</div>
+        <div class="col-md-2"><label class="small">Qtd</label>{{ formset.empty_form.quantidade }}</div>
+        <div class="col-md-3 campo-lote" style="display:none;"><label class="small">Lote</label>{{ formset.empty_form.lote }}</div>
+        <div class="col-md-2 campo-validade" style="display:none;"><label class="small">Validade</label>{{ formset.empty_form.validade }}</div>
+        <div class="col-md-2 text-end"><button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removerProduto(this)">Remover</button></div>
     </div>
 </div>
 
@@ -124,7 +101,7 @@
         const container = document.getElementById('itens-container');
         const totalForms = document.getElementById('id_itens-TOTAL_FORMS');
         const emptyForm = document.getElementById('empty-form').innerHTML;
-        const regras = JSON.parse('{{ produtos_regras_json|safe }}');
+        const  regras = JSON.parse('{{ produtos_regras_json|safe }}');
 
         function atualizarCampos(select) {
             const row = select.closest('.item-form');
@@ -141,65 +118,38 @@
             }
         }
 
-        // Função para transformar o select normal em um select com pesquisa
         function aplicarBusca(selectElement) {
             new TomSelect(selectElement, {
                 create: false,
                 placeholder: "Pesquise cód. ou nome...",
-                onChange: function() {
-                    // Quando o usuário selecionar algo, atualiza os campos de Lote/Validade
-                    atualizarCampos(selectElement);
-                }
+                onChange: function() { atualizarCampos(selectElement); }
             });
         }
 
-        // Aplica a busca nos campos de produto que já vieram carregados na tela
         document.querySelectorAll('.item-form select[name$="-produto"]').forEach(s => {
-            if(!s.id.includes('__prefix__')){
-                aplicarBusca(s);
-                atualizarCampos(s);
-            }
+            if(!s.id.includes('__prefix__')){ aplicarBusca(s); atualizarCampos(s); }
         });
 
-        // Evento de adicionar nova linha
         btnAdd.addEventListener('click', function() {
             let count = parseInt(totalForms.value);
             container.insertAdjacentHTML('beforeend', emptyForm.replace(/__prefix__/g, count));
             totalForms.value = count + 1;
-            
             const newSelects = container.querySelectorAll('.item-form select[name$="-produto"]');
             const newSelect = newSelects[newSelects.length - 1];
-            
-            // Aplica a barra de busca no campo que acabou de ser criado
             aplicarBusca(newSelect);
             atualizarCampos(newSelect);
         });
     });
 
-    // Função que remove o produto
     function removerProduto(botao) {
         const linha = botao.closest('.item-form');
         const checkboxDelete = linha.querySelector('input[name$="-DELETE"]');
-        
         linha.style.display = 'none';
-        
-        if (checkboxDelete) {
-            checkboxDelete.checked = true;
-        } else {
-            const inputs = linha.querySelectorAll('input, select, textarea');
-            inputs.forEach(input => {
-                // Se for um campo modificado pelo TomSelect, ele tem um jeito especial de ser limpo
-                if (input.tomselect) {
-                    input.tomselect.clear();
-                } else {
-                    input.value = ''; 
-                }
-                
-                input.removeAttribute('required'); 
-                
-                if (input.type === 'checkbox' || input.type === 'radio') {
-                    input.checked = false;
-                }
+        if (checkboxDelete) { checkboxDelete.checked = true; } 
+        else {
+            linha.querySelectorAll('input, select').forEach(input => {
+                if (input.tomselect) { input.tomselect.clear(); } else { input.value = ''; }
+                input.removeAttribute('required');
             });
         }
     }

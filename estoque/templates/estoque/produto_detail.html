@@ -1,40 +1,102 @@
 {% extends 'estoque/base.html' %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>Saldo Detalhado: {{ produto.nome }}</h2>
-    <a href="{% url 'produto_list' %}" class="btn btn-secondary">Voltar aos Produtos</a>
+    <h2><i class="bi bi-box-seam text-primary me-2"></i> Detalhes do Produto</h2>
+    <a href="{% url 'produto_list' %}" class="btn btn-secondary fw-bold"><i class="bi bi-arrow-left"></i> Voltar</a>
 </div>
 
-<div class="card border-primary shadow-sm mb-4">
-    <div class="card-header bg-primary text-white fw-bold">
-        Estoque Atual
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-dark text-white fw-bold">Dados Principais</div>
+            <div class="card-body">
+                <h4 class="text-primary fw-bold mb-3">{{ produto.nome }}</h4>
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item px-0"><strong>Código (ID):</strong> {{ produto.id }}</li>
+                    <li class="list-group-item px-0"><strong>Espécie:</strong> {{ produto.especie.nome }}</li>
+                    <li class="list-group-item px-0"><strong>Marca:</strong> {{ produto.marca.nome|default:"Não informada" }}</li>
+                    <li class="list-group-item px-0">
+                        <strong>Rastreabilidade:</strong> 
+                        {% if produto.controla_lote %}<span class="badge bg-danger">Controla Lote</span>{% endif %}
+                        {% if produto.controla_validade %}<span class="badge bg-warning text-dark">Controla Validade</span>{% endif %}
+                        {% if not produto.controla_lote and not produto.controla_validade %}<span class="badge bg-secondary">Controle Simples</span>{% endif %}
+                    </li>
+                </ul>
+            </div>
+        </div>
     </div>
-    <div class="card-body">
-        <h1 class="text-primary mb-2">{{ saldo_total }} <span class="fs-4 text-muted fw-normal">unidades no total</span></h1>
-        <p class="text-muted mb-0">Abaixo estão listados apenas os lotes que possuem saldo disponível na empresa atual.</p>
+
+    <div class="col-md-6">
+        <div class="card shadow-sm border-success h-100">
+            <div class="card-header bg-success text-white fw-bold d-flex justify-content-between">
+                <span>Saldo Total (Geral)</span>
+                <span class="fs-5">{{ saldo_total }} Peças</span>
+            </div>
+            <div class="card-body">
+                <h6 class="fw-bold text-muted border-bottom pb-2 mb-3">Distribuição Atual por Estoque</h6>
+                {% if saldos_locais %}
+                    <ul class="list-group">
+                        {% for sl in saldos_locais %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center bg-light">
+                            <strong><i class="bi bi-geo-alt-fill text-success me-2"></i> {{ sl.local.nome }}</strong>
+                            <span class="badge bg-success rounded-pill fs-6">{{ sl.quantidade }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <div class="alert alert-secondary text-center">Produto sem saldo em estoque no momento.</div>
+                {% endif %}
+            </div>
+        </div>
     </div>
 </div>
 
-<table class="table table-striped table-bordered align-middle">
-    <thead class="table-dark">
-        <tr>
-            <th>Número do Lote</th>
-            <th>Data de Validade</th>
-            <th>Quantidade Disponível</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for item in estoque_por_lote %}
-        <tr>
-            <td class="fw-bold">{{ item.lote }}</td>
-            <td>{{ item.validade|date:"d/m/Y"|default:"-" }}</td>
-            <td class="text-success fw-bold fs-6">{{ item.saldo }}</td>
-        </tr>
-        {% empty %}
-        <tr>
-            <td colspan="3" class="text-center py-4 text-muted">Este produto está zerado no estoque.</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+{% if produto.controla_lote %}
+<div class="card shadow-sm border-0 mb-5">
+    <div class="card-header bg-danger text-white fw-bold">
+        <i class="bi bi-upc-scan me-2"></i> Rastreabilidade de Lotes
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-striped table-hover align-middle m-0 text-center">
+            <thead class="table-light">
+                <tr>
+                    <th>Lote Identificador</th>
+                    <th>Vencimento</th>
+                    <th>Saldo Global do Lote</th>
+                    <th class="text-start">Onde as peças deste lote estão? (Por Local)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lote in lotes_info %}
+                <tr>
+                    <td><strong class="text-danger">{{ lote.lote }}</strong></td>
+                    <td>
+                        {% if lote.validade %}
+                            {{ lote.validade|date:"d/m/Y" }}
+                        {% else %}
+                            <span class="text-muted">N/A</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge bg-dark fs-6">{{ lote.saldo_total }} Peças</span></td>
+                    <td class="text-start">
+                        {% for loc in lote.locais %}
+                            <span class="badge border border-success text-success bg-white fw-bold me-1 mb-1 p-2">
+                                {{ loc.nome }}: <span class="fs-6">{{ loc.saldo }}</span>
+                            </span>
+                        {% endfor %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="text-center py-4 text-muted">
+                        Nenhum lote com saldo positivo encontrado para este produto.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
 {% endblock %}
